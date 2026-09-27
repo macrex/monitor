@@ -1,0 +1,1348 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor</title>
+<meta name="monitor-token" content="__TOKEN__">
+<link rel="icon" href="data:,">
+<style>
+:root {
+  /* tokyo-night, o tema do herdr; a cor fica só para o estado */
+  --fundo: #16161e; --painel: #1a1b26; --elevado: #1f2335; --elevado-2: #24283b; --selecionado: #292e42;
+  --linha: #292e42; --linha-forte: #3b4261;
+  --texto: #c0caf5; --texto-2: #a9b1d6; --texto-3: #7c85b0; --roxo: #bb9af7;
+  --trabalhando: #e0af68; --esperando: #f7768e; --finalizado: #7dcfff;
+  --verde: #9ece6a; --laranja: #ff9e64; --azul: #7aa2f7; --teal: #73daca; --azul-2: #2ac3de;  /* níveis e famílias de modelo */
+  --alerta-linha: #4a2a3a; --alerta-botao: #2a2233;
+  --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font: 14px/1.4 var(--ui); }
+button, select { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; margin: 0; padding: 0; text-align: left; }
+button:disabled { opacity: .4; cursor: default; }
+:focus-visible { outline: 2px solid var(--finalizado); outline-offset: 2px; }
+.mono { font-family: var(--mono); }
+.t2 { color: var(--texto-2); }
+.t3 { color: var(--texto-3); }
+.forte { font-weight: 600; }
+.corta { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.espaco { flex-grow: 1; }
+.st-trabalhando { color: var(--trabalhando); }
+.st-esperando { color: var(--esperando); }
+.st-finalizado { color: var(--finalizado); }
+.icone { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--linha); border-radius: 6px; background: var(--elevado); color: var(--texto-2); }
+.icone:hover:not(:disabled) { color: var(--texto); border-color: var(--linha-forte); }
+.icone.nu { border-color: transparent; background: transparent; }
+.botao { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--linha); border-radius: 6px; background: var(--elevado); font-size: 13px; white-space: nowrap; }
+.botao:hover:not(:disabled) { border-color: var(--linha-forte); }
+.botao.primario { background: var(--finalizado); border-color: var(--finalizado); color: var(--fundo); font-weight: 700; }
+.fileira { display: contents; }  /* embrulho que só a tela estreita arruma */
+input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--finalizado); }
+
+header { position: sticky; top: 0; z-index: 2; min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; padding: 8px 24px; background: var(--painel); border-bottom: 1px solid var(--linha); }
+#controles-voz { display: none; }
+header.voz-aberta #controles-voz { order: 9; flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 4px 0; }
+/* A marca: o traço de pulso (o monitor) terminando no ponto de quem já entregou; o nome e a versão ao lado. */
+.marca { display: flex; align-items: center; gap: 10px; }
+.logo { flex-shrink: 0; }
+.logo rect { fill: var(--elevado); stroke: var(--linha-forte); }
+.logo path { fill: none; stroke: var(--trabalhando); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.logo circle { fill: var(--finalizado); }
+.nome-marca { display: flex; flex-direction: column; line-height: 1.15; }
+.nome-marca b { font-size: 15px; letter-spacing: .02em; }
+.nome-marca .sub { font-size: 11px; color: var(--texto-3); }
+.versao { padding: 1px 6px; border: 1px solid var(--linha); border-radius: 4px; font: 11px var(--mono); color: var(--texto-3); }
+.versao:empty { display: none; }
+/* O resumo: uma pílula por estado, na cor dele; zerada, apagada. */
+#resumo { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.pilula { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 14px; white-space: nowrap;
+  background: color-mix(in srgb, currentColor 12%, transparent); }
+.pilula b { font-family: var(--mono); }
+.pilula.t3 { background: var(--elevado); }
+/* A idade do dado, com o ponto verde da conexão; vermelho quando o servidor some. */
+#atualizado { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+#atualizado::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--verde); }
+#atualizado.fora { color: var(--esperando); }
+#atualizado.fora::before { background: var(--esperando); }
+.voz { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--texto-2); }
+.voz select { height: 32px; max-width: 220px; padding: 0 8px; border: 1px solid var(--linha); border-radius: 6px; background: var(--elevado); color: var(--texto); }
+
+/* O miolo: filtros à esquerda; no centro o uso do plano, as sessões e a atividade recente. De 1700 px para cima, o uso
+   do plano e a atividade vão para uma coluna à direita. */
+#corpo { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto 1fr auto;
+  grid-template-areas: "trilho limites" "trilho principal" "trilho atividade"; min-height: calc(100vh - 56px); padding-bottom: 100px; }
+nav { grid-area: trilho; width: 290px; display: flex; flex-direction: column; gap: 4px; padding: 20px 12px; background: var(--painel); border-right: 1px solid var(--linha); }
+#painel-limites { grid-area: limites; padding: 24px 28px 0; }
+#atividade { grid-area: atividade; padding: 8px 28px 24px; }
+#painel-limites:empty, #atividade:empty { display: none; }
+@media (min-width: 1700px) {
+  #corpo { grid-template-columns: auto minmax(0, 1fr) 420px; grid-template-rows: auto 1fr;
+    grid-template-areas: "trilho principal limites" "trilho principal atividade"; }
+  #painel-limites, #atividade { padding: 20px; background: var(--painel); border-left: 1px solid var(--linha); }
+  #atividade { padding-top: 8px; }
+}
+.titulo-painel { margin-bottom: 10px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--texto-3); }
+.limites-grade { display: flex; flex-wrap: wrap; gap: 10px; }  /* os cartões crescem até ocupar a linha toda, a última também */
+.cartao-limite { flex: 1 1 170px; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--linha); border-radius: 8px; background: var(--painel); }
+.cartao-limite .topo { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.cartao-limite .pct { margin-left: auto; font: 700 20px var(--mono); }
+.cartao-limite .barra { width: 100%; height: 6px; }
+.cartao-limite .barra i { height: 6px; background: currentColor; }
+.cartao-limite .renova { font-size: 12px; }
+/* Níveis: verde, laranja, vermelho. Valem para o contexto e para o uso do plano. */
+.nivel-baixo .pct, .nivel-baixo .barra, .ctx.nivel-baixo { color: var(--verde); }
+.nivel-medio .pct, .nivel-medio .barra, .ctx.nivel-medio { color: var(--laranja); }
+.nivel-alto .pct, .nivel-alto .barra, .ctx.nivel-alto { color: var(--esperando); }
+.feed { border: 1px solid var(--linha); border-radius: 8px; background: var(--painel); overflow: hidden; }
+.item-feed { display: grid; grid-template-columns: auto auto minmax(0, 1fr); grid-template-areas: "hora projeto rotulo" "texto texto texto";
+  gap: 2px 10px; width: 100%; padding: 8px 14px; border-top: 1px solid var(--linha); font-size: 13px; }
+.item-feed:first-child { border-top: 0; }
+.item-feed:hover { background: var(--elevado); }
+.item-feed .hora { grid-area: hora; font-size: 12px; }
+.item-feed .projeto-feed { grid-area: projeto; font-weight: 600; white-space: nowrap; }
+.item-feed .rotulo-feed { grid-area: rotulo; }
+.item-feed .texto-feed { grid-area: texto; color: var(--texto-2); }
+.item-feed .tipo-ferramenta { font: 700 12px var(--mono); color: var(--azul); }
+.item-feed .tipo-usuario { color: var(--roxo); font-weight: 600; }
+.item-feed .tipo-erro { color: var(--texto-3); }  /* erro de ferramenta é ruído: não chama o olho */
+/* O modelo, numa etiqueta com a cor da família. */
+.modelo { justify-self: start; max-width: 100%; padding: 1px 7px; border-radius: 5px; color: var(--texto-2); background: color-mix(in srgb, currentColor 14%, transparent); }
+.m-opus { color: var(--roxo); } .m-sonnet { color: var(--azul); } .m-haiku { color: var(--teal); }
+.m-fable { color: var(--laranja); } .m-gpt { color: var(--verde); } .m-gemini { color: var(--azul-2); }
+nav .titulo { padding: 0 12px 8px; font-size: 12px; color: var(--texto-3); }
+nav .sep { height: 1px; margin: 16px 12px; background: var(--linha); }
+.item-trilho { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 6px; }
+.item-trilho:hover, .item-modelo:hover { background: var(--elevado); }
+.item-trilho[aria-pressed="true"], .item-modelo[aria-pressed="true"] { background: var(--selecionado); }
+#trilho[hidden] { display: none; }
+.item-trilho .l1 { display: flex; align-items: center; gap: 10px; }
+.item-trilho .nome { font-size: 15px; font-weight: 600; }
+.item-trilho .n { margin-left: auto; font: 700 20px var(--mono); }
+.item-trilho .estados { display: flex; gap: 14px; padding-left: 38px; font: 12px var(--mono); }
+.sigla { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--linha-forte); border-radius: 5px; font: 700 11px var(--mono); color: var(--texto-2); }
+.item-modelo { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 6px; font-family: var(--mono); }
+.item-modelo .nome { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; }
+.item-modelo .estados { display: flex; gap: 6px; font-size: 11px; }
+
+main { grid-area: principal; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px 28px 16px; }
+.vazio-lista { padding: 40px; text-align: center; color: var(--texto-3); border: 1px dashed var(--linha); border-radius: 8px; }
+
+/* Falha de ferramenta: quase sempre o agente contorna sozinho. Fica na gaveta do card aberto, apagada. */
+.botao.discreto { background: transparent; color: var(--texto-3); }
+.falhas { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px dashed var(--linha); border-radius: 6px; }
+.falha-item { font: 12px/1.5 var(--mono); color: var(--texto-3); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.falha-item b { color: var(--texto-2); font-weight: 600; }
+.acoes { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* Responder e escrever para o agente, dentro do card: a pergunta da tela com as opções, e a caixa de texto. */
+.sessao.espera { border-color: var(--esperando); background: color-mix(in srgb, var(--esperando) 5%, var(--painel)); }
+.resposta { grid-area: resposta; display: flex; flex-direction: column; gap: 8px; padding: 0 16px 12px; }
+.resposta .pergunta { color: var(--esperando); font-weight: 600; overflow-wrap: anywhere; }
+.opcoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.botao.opcao { height: auto; min-height: 32px; padding: 6px 12px; white-space: normal; text-align: left; border-color: var(--alerta-linha); background: var(--alerta-botao); }
+.comando { grid-area: comando; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; }
+.caixa { flex: 1 1 280px; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--linha-forte); border-radius: 6px; background: var(--fundo); color: var(--texto); font: inherit; }
+.retorno { font-size: 12px; }
+
+/* As sessões numa grade: a fechada é um cartão; a que espera você e a aberta ocupam a linha inteira. */
+.grade-sessoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); grid-auto-flow: dense; gap: 12px; }
+.grade-sessoes > :not(.cartao) { grid-column: 1 / -1; }
+/* O card largo: o .cab some como caixa e os filhos dele entram na grade da sessão, com as métricas abaixo do "fazendo". */
+.sessao { scroll-margin-top: 72px; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; overflow: hidden;
+  grid-template-areas: "projeto projeto acoes" "estado modelo acoes" "fazendo fazendo fazendo" "resposta resposta resposta"
+    "comando comando comando" "metricas metricas metricas" "aberto aberto aberto" "subs subs subs";
+  border: 1px solid var(--linha); border-radius: 8px; background: var(--painel); }
+.cab { display: contents; cursor: pointer; }
+.cab > :nth-child(1) { grid-area: estado; padding: 2px 0 0 16px; }    /* filhos do .cab na ordem de blocoSessao */
+.cab > :nth-child(2) { grid-area: projeto; padding: 12px 0 0 16px; }
+.cab > :nth-child(3) { grid-area: modelo; margin: 2px 0 0 12px; }
+.cab > .metricas { grid-area: metricas; display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 10px 16px 12px; border-top: 1px solid var(--linha); }
+.cab > .acoes { grid-area: acoes; align-self: center; padding: 12px 12px 0 8px; }
+.cab .projeto { font-size: 17px; font-weight: 700; }
+.cab .titulo { margin-left: 10px; font-size: 13px; color: var(--texto-2); }
+.rotulinho { display: block; margin-bottom: 3px; font-size: 11px; color: var(--texto-3); }
+.linha-fazendo { grid-area: fazendo; display: flex; flex-direction: column; gap: 4px; padding: 8px 16px 12px; cursor: pointer; }
+.fazendo { font-size: 15px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* O cartão: estado e tempo, projeto, modelo, o contexto em número grande, o que está fazendo e os subagentes. */
+/* Rodando ganha destaque: fundo elevado, borda e faixa no alto na cor de quem trabalha. Finalizada fica quieta e menor. */
+.cartao { display: flex; flex-direction: column; gap: 10px; padding: 14px; cursor: pointer; background: var(--elevado);
+  border-color: color-mix(in srgb, var(--trabalhando) 40%, var(--linha-forte)); box-shadow: inset 0 3px 0 var(--trabalhando); }
+.cartao:hover { border-color: var(--trabalhando); }
+.cartao.fim { gap: 8px; padding: 12px; background: var(--fundo); border-color: var(--linha); box-shadow: none; }
+.cartao.fim:hover { border-color: var(--linha-forte); }
+.cartao.fim .projeto { font-size: 15px; color: var(--texto-2); }
+.cartao.fim .fazendo { font-size: 13px; -webkit-line-clamp: 2; }
+.grade-sessoes.finalizadas { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.topo-cartao, .rodape-cartao { display: flex; align-items: center; gap: 8px; }
+.topo-cartao .mono { font-size: 12px; color: var(--texto-2); }
+.cartao .projeto { font-size: 18px; font-weight: 700; }
+.cartao > .modelo { align-self: flex-start; }
+.rodape-cartao .ctx .barra { display: none; }
+.ctx-grande { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; font-size: 12px; }
+.ctx-grande .pct { font: 700 26px var(--mono); }
+.ctx-grande .barra { width: 100%; height: 6px; }
+.ctx-grande .barra i { height: 6px; background: currentColor; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { max-width: 100%; padding: 2px 8px; border-radius: 10px; background: var(--elevado); font-size: 12px; }
+.rodape-cartao { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--linha); font-size: 12px; color: var(--texto-3); }
+.girando { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border: 2px solid var(--linha-forte); border-top-color: var(--trabalhando); border-radius: 50%; animation: gira .8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .girando { animation: none; } }
+.prompt, .plano { font-size: 13px; color: var(--texto-3); }
+.plano b { color: var(--texto-2); font-weight: 500; }
+.ctx { display: flex; align-items: center; gap: 8px; font: 12px var(--mono); }
+.barra { display: block; width: 72px; height: 4px; flex-shrink: 0; border-radius: 2px; background: var(--linha); }
+.barra i { display: block; height: 4px; border-radius: 2px; background: var(--texto-2); }
+.ctx .barra i { background: currentColor; }
+
+.subs { grid-area: subs; border-top: 1px solid var(--linha); }
+.subs > :first-child { border-top: 0; }
+/* Um subagente: estado, nome e tempo em cima; o que faz, o modelo e o contexto embaixo. */
+.cols.ag { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; gap: 2px 8px; align-items: center; min-height: 44px; padding: 8px 16px;
+  grid-template-areas: "estado nome nome tempo" ". fazendo modelo contexto"; border-top: 1px solid var(--linha); font-size: 13px; cursor: pointer; }
+.cols .rotulo, .cols .barra { display: none; }
+.cols.ag > :nth-child(1) { grid-area: estado; }    /* filhos na ordem de linhaAgente */
+.cols.ag > :nth-child(2) { grid-area: nome; flex-direction: row; align-items: baseline; gap: 8px; }
+.cols.ag > :nth-child(3) { grid-area: modelo; font-size: 12px; }
+.cols.ag > :nth-child(4) { grid-area: contexto; color: var(--texto-3); }
+.cols.ag > :nth-child(5) { grid-area: tempo; justify-self: end; font-size: 12px; color: var(--texto-2); }
+.cols.ag > :nth-child(6) { grid-area: fazendo; }
+.cols.ag:hover, .cols.ag.aberto { background: var(--elevado); }
+.nome-ag { display: flex; flex-direction: column; min-width: 0; }
+.nome-ag .funcao { font-size: 12px; color: var(--texto-3); }
+.wf { padding: 8px 18px; border-top: 1px solid var(--linha); font-size: 12px; color: var(--texto-2); background: var(--elevado); }
+.wf b { color: var(--texto); }
+.recolhe-subs { display: block; width: 100%; padding: 8px 18px; border-top: 1px solid var(--linha); font-size: 13px; color: var(--texto-3); }
+.recolhe-subs:hover { background: var(--elevado); color: var(--texto-2); }
+.nova { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; background: var(--finalizado); color: var(--fundo); font-size: 11px; font-weight: 700; }
+.gavetas { display: flex; flex-wrap: wrap; gap: 8px; }
+.tela { margin: 0; max-height: 440px; overflow: auto; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 6px; background: var(--fundo); font: 12px/1.45 var(--mono); white-space: pre; }
+
+.aberto-corpo { grid-area: aberto; display: flex; flex-direction: column; gap: 14px; padding: 16px 18px 18px 52px; border-top: 1px solid var(--linha); background: var(--elevado); }
+.conclusao { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 18px; border: 1px solid var(--linha-forte); border-radius: 8px; background: var(--painel); }
+.conclusao .topo { display: flex; align-items: center; gap: 12px; }
+.conclusao .texto { display: flex; flex-direction: column; gap: 12px; max-width: 860px; font-size: 14px; line-height: 1.65; }
+.conclusao p { margin: 0 -12px; padding: 0 12px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.conclusao p.lendo { background: var(--elevado-2); }
+.conclusao code { padding: 1px 5px; border-radius: 4px; background: var(--elevado-2); font: 12.5px var(--mono); }
+.eventos { display: flex; flex-direction: column; border: 1px solid var(--linha); border-radius: 8px; background: var(--painel); overflow: hidden; }
+.ev { display: grid; grid-template-columns: 76px 120px minmax(0, 1fr) 72px 32px 32px; gap: 12px; align-items: center; min-height: 42px; padding: 0 14px; border-top: 1px solid var(--linha); font-size: 13px; cursor: pointer; }
+.eventos > .ev:first-child { border-top: 0; }
+.ev:hover, .ev.aberto { background: var(--elevado); }
+.ev .tipo-ferramenta { font: 700 13px var(--mono); }
+.ev .tipo-usuario { color: var(--roxo); font-weight: 600; }
+.ev .tipo-erro, .falhou { color: var(--esperando); }
+.ev-corpo { display: flex; flex-direction: column; gap: 10px; padding: 4px 14px 16px 222px; background: var(--elevado); }
+.ev-corpo .legenda { font-size: 12px; color: var(--texto-3); }
+.ev-corpo pre { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--fundo); font: 12px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ev-corpo .livre { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.ev-corpo .botoes { display: flex; gap: 8px; }
+
+#player { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; height: 84px; display: flex; align-items: center; gap: 16px; padding: 0 28px; background: var(--elevado); border-top: 1px solid var(--linha-forte); }
+#player[hidden] { display: none; }
+#player .info { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+/* A palavra lida: marcada no campo que mostra o texto (::highlight, sem mexer no DOM) e na frase do player. */
+::highlight(lendo) { background-color: color-mix(in srgb, var(--finalizado) 38%, transparent); color: var(--texto); }
+#player-trecho { font-size: 15px; color: var(--texto-2); }
+#player-trecho mark { padding: 0 2px; border-radius: 3px; background: color-mix(in srgb, var(--finalizado) 38%, transparent); color: var(--texto); }
+/* Os arquivos escritos no turno: o nome e a pasta; o clique abre no VS Code. */
+.arquivos { display: flex; flex-direction: column; border: 1px solid var(--linha); border-radius: 8px; background: var(--painel); overflow: hidden; }
+.arquivo { display: flex; align-items: baseline; gap: 10px; min-width: 0; padding: 8px 14px; border-top: 1px solid var(--linha); color: var(--texto); text-decoration: none; font-size: 13px; }
+.arquivo:first-child { border-top: 0; }
+.arquivo:hover { background: var(--elevado); }
+.arquivo .nome-arquivo { flex-shrink: 0; font-family: var(--mono); color: var(--azul); }
+#player .barra { width: 100%; }
+#player .barra i { background: var(--finalizado); }
+#player select { height: 36px; padding: 0 8px; border: 1px solid var(--linha-forte); border-radius: 6px; background: transparent; color: var(--texto); }
+.redondo { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 20px; background: var(--finalizado); color: var(--fundo); }
+.redondo.secundario { width: 36px; height: 36px; border: 1px solid var(--linha-forte); background: transparent; color: var(--texto); }
+
+/* Tela estreita (monitor em retrato, celular): tudo empilha e nada rola de lado. */
+@media (max-width: 1100px) {
+  header { gap: 8px 16px; padding: 8px 16px; }
+  #resumo { gap: 6px; white-space: nowrap; }
+  .nome-marca .sub, .versao { display: none; }  /* cabe numa linha no monitor em pé */
+  .pilula { padding: 0 10px; }
+  .so-largo { display: none; }
+  .icone { width: 40px; height: 40px; }
+  .botao, .voz select { height: 40px; }
+
+  #corpo { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "trilho" "limites" "principal" "atividade"; }
+  #painel-limites { padding: 16px 16px 0; }
+  #atividade { padding: 8px 16px 16px; }
+  .cartao-limite { flex-basis: 150px; }
+  nav { width: 100%; gap: 8px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--linha); }
+  nav .titulo, nav .sep, .item-trilho .sigla, .item-modelo .estados { display: none; }
+  .fileira { display: flex; align-items: center; gap: 8px; overflow-x: auto; }
+  .fileira-modelos .titulo { display: block; flex-shrink: 0; padding: 0 4px 0 0; }
+  .item-trilho, .item-modelo { width: auto; height: 40px; flex-shrink: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--linha); background: var(--elevado); white-space: nowrap; }
+  .item-trilho[aria-pressed="true"], .item-modelo[aria-pressed="true"] { border-color: var(--linha-forte); }
+  .item-trilho .l1 { gap: 8px; }
+  .item-trilho .n { margin-left: 0; font-size: 15px; }
+  .item-trilho .estados { padding-left: 4px; gap: 8px; }
+  main { padding: 16px; }
+  .caixa { flex-basis: 100%; height: 40px; }
+  .aberto-corpo { padding: 14px 12px 16px; }
+  .recolhe-subs { min-height: 40px; padding: 8px 16px; }
+  .botao.opcao { min-height: 40px; }
+
+  .conclusao .topo { flex-wrap: wrap; }
+  .ev { grid-template-columns: auto auto minmax(0, 1fr) auto 40px 40px; gap: 2px 10px; padding: 6px 4px 6px 14px;
+    grid-template-areas: "hora tipo . duracao ouvir abrir" "texto texto texto texto ouvir abrir"; }
+  .ev > :nth-child(1) { grid-area: hora; font-size: 12px; }    /* filhos na ordem de linhaEvento */
+  .ev > :nth-child(2) { grid-area: tipo; }
+  .ev > :nth-child(3) { grid-area: texto; }
+  .ev > :nth-child(4) { grid-area: duracao; }
+  .ev > :nth-child(5) { grid-area: ouvir; }
+  .ev > :nth-child(6) { grid-area: abrir; }
+  .ev-corpo { padding: 4px 14px 16px; }
+
+  #player { gap: 12px; padding: 0 16px; }
+  #player > span:last-child { display: none; }  /* o nome da voz já está no botão Voz */
+}
+/* Celular: o resumo fica só nos símbolos e os alvos de toque crescem para 44 px. */
+@media (max-width: 480px) {
+  header { gap: 8px 12px; }
+  #resumo .rotulo, #rotulo-botao-voz { display: none; }
+  #abrir-voz { width: 44px; padding: 0; justify-content: center; }
+  .icone { width: 44px; height: 44px; }
+  .botao, .voz select, .item-trilho, .item-modelo, .caixa { height: 44px; }
+  .botao.opcao, .recolhe-subs { min-height: 44px; }
+  .cols.ag { grid-template-columns: 12px minmax(0, 1fr) auto; grid-template-areas: "estado nome tempo" ". fazendo fazendo"; }
+  .cols.ag > :nth-child(3), .cols.ag > :nth-child(4) { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="marca">
+    <svg class="logo" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="1" y="1" width="30" height="30" rx="8"/>
+      <path d="M6 17h4.5l2.5-6.5 4 12 3-8.5 1.5 3H24"/>
+      <circle cx="25.5" cy="17" r="2.2"/>
+    </svg>
+    <span class="nome-marca"><b>Monitor</b><span class="sub">agentes de IA</span></span>
+    <span class="versao" id="versao"></span>
+  </div>
+  <div id="resumo">carregando...</div>
+  <div class="espaco"></div>
+  <div id="controles-voz">
+    <label class="voz" id="rotulo-voz">Voz <select id="voz"></select></label>
+    <button class="botao" id="testar-voz" type="button">Testar</button>
+    <label class="voz" id="rotulo-taxa">Velocidade <select id="taxa"></select></label>
+    <label class="voz"><input type="checkbox" id="aviso-voz"> Avisar por voz</label>
+    <label class="voz"><input type="checkbox" id="aviso-notificacao"> Avisar por notificação</label>
+  </div>
+  <span class="mono t3" id="atualizado"></span>
+  <button class="botao" id="abrir-voz" type="button" aria-expanded="false" aria-controls="controles-voz"><span id="rotulo-botao-voz">Voz</span></button>
+</header>
+<div id="corpo">
+  <nav id="trilho" aria-label="Harnesses e modelos"></nav>
+  <section id="painel-limites" aria-label="Uso do plano"></section>
+  <main id="principal"></main>
+  <section id="atividade" aria-label="Atividade recente"></section>
+</div>
+<div id="player" role="region" aria-label="Leitura em voz alta" hidden></div>
+<script>
+"use strict";
+const ROTULO = { trabalhando: "trabalhando", esperando: "esperando você", finalizado: "finalizado" };
+const SIMBOLO = { trabalhando: "●", esperando: "◆", finalizado: "✓" };
+const ESTADOS = ["trabalhando", "esperando", "finalizado"];
+const SIGLA = { "claude-code": "CC", codex: "CX", agy: "AG", pi: "PI" };
+const ICONES = {  // constantes: com o ícone da aba, o único HTML montado por string na página
+  ouvir: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
+  abrir: '<path d="m9 6 6 6-6 6"/>', fechar: '<path d="m6 9 6 6 6-6"/>', tirar: '<path d="M6 6l12 12M18 6 6 18"/>',
+  copiar: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  pausar: '<path d="M8 5v14M16 5v14"/>', parar: '<rect x="6" y="6" width="12" height="12" rx="1"/>', tocar: '<path d="M7 5v14l12-7z"/>',
+  microfone: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/>',
+};
+const abertos = new Set();         // agentes com a conclusão e os eventos à mostra
+const eventosAbertos = new Set();  // linhas de evento expandidas
+const eventos = {};                // id do agente -> resposta de /api/eventos
+let ultimo = null, recebidoEm = 0, deslocamento = 0;
+let filtro = null;                 // "h:<harness>" ou "m:<modelo>"; null = tudo
+
+// Preferências só deste navegador; sem armazenamento, valem até recarregar.
+function guardado(chave, padrao) { try { return JSON.parse(localStorage.getItem(chave)) ?? padrao; } catch (_) { return padrao; } }
+function guarda(chave, valor) { try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (_) { /* sem armazenamento */ } }
+let lidas = guardado("monitor.lidas", {});  // id da sessão -> "ultimo" da conclusão já aberta; uma conclusão nova volta a ser nova
+
+// Todo texto vindo do servidor entra por textContent: um prompt com marcação não vira HTML.
+function el(tag, attrs, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "onclick") e.addEventListener("click", v);
+    else if (k.includes("-")) e.setAttribute(k, v);  // data-* e aria-* só existem como atributo
+    else e[k] = v;
+  }
+  for (const f of filhos.flat(Infinity)) if (f !== null && f !== undefined && f !== false) e.append(f instanceof Node ? f : String(f));
+  return e;
+}
+function icone(nome, tamanho = 16) {
+  const s = el("span", { style: "display: inline-flex" });
+  s.innerHTML = '<svg width="' + tamanho + '" height="' + tamanho + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"'
+    + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONES[nome] + "</svg>";
+  return s;
+}
+
+function agoraMs() { return Date.now() + deslocamento; }
+function ms(isoTxt) { return isoTxt ? Date.parse(isoTxt) : 0; }
+function duracao(msTotal) {
+  let s = Math.max(0, Math.round(msTotal / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); s %= 60;
+  if (d) return d + "d" + h + "h";
+  if (h) return h + "h" + String(m).padStart(2, "0") + "m";
+  if (m) return m + "m" + String(s).padStart(2, "0") + "s";
+  return s + "s";
+}
+function segundos(msTotal) { return msTotal < 60000 ? (Math.max(0, msTotal) / 1000).toFixed(1).replace(".", ",") + " s" : duracao(msTotal); }
+function hora(isoTxt) { return isoTxt ? new Date(isoTxt).toLocaleTimeString("pt-BR", { hour12: false }) : ""; }
+function mil(n) {
+  if (!n) return null;
+  if (n < 1000) return String(n);
+  return n >= 1e6 ? (n / 1e6).toFixed(1).replace(".", ",") + " mi" : Math.round(n / 1000) + " mil";
+}
+// O nome do modelo como se fala: "claude-opus-5-5[1m]" vira "Opus 5.5", "claude-haiku-4-5-20251001" vira "Haiku 4.5" e
+// "gpt-5.6-terra" vira "GPT 5.6 Terra". Números seguidos viram a versão, com ponto.
+function modeloCurto(m) {
+  if (!m) return "?";
+  const saida = [];
+  for (const p of m.replace(/^.*\//, "").replace(/\[.*\]$/, "").replace(/^claude-/, "").replace(/-\d{8}$/, "").split("-")) {
+    const anterior = saida[saida.length - 1];
+    if (/^\d+(\.\d+)?$/.test(p) && /^\d+(\.\d+)*$/.test(anterior || "")) saida[saida.length - 1] = anterior + "." + p;
+    else saida.push(p.toLowerCase() === "gpt" ? "GPT" : p.charAt(0).toUpperCase() + p.slice(1));
+  }
+  return saida.join(" ");
+}
+function janelaCurta(j) { return j >= 1e6 ? String(j / 1e6).replace(".", ",") + "M" : Math.round(j / 1000) + "k"; }
+function plural(n, um, varios) { return n + " " + (n === 1 ? um : varios); }
+function ativo(a) { return a.status === "trabalhando" || a.status === "esperando"; }
+// Relógio vivo: o span guarda o início (ou o fim), e o tique de 1 s o reescreve contra o relógio do servidor. Sem
+// início ele conta o que falta até o fim: é a contagem regressiva da renovação dos limites.
+function relogio(prefixo, desdeIso, ateIso) {
+  const attrs = { class: "mono", "data-prefixo": prefixo };
+  if (desdeIso) attrs["data-desde"] = ms(desdeIso);
+  if (ateIso) attrs["data-ate"] = ms(ateIso);
+  const e = el("span", attrs);
+  pinta(e);
+  return e;
+}
+function pinta(e) {
+  const ate = e.dataset.ate ? Number(e.dataset.ate) : agoraMs(), desde = e.dataset.desde ? Number(e.dataset.desde) : agoraMs();
+  e.textContent = e.dataset.prefixo + duracao(ate - desde);
+}
+function tempoTurno(a) { return relogio("", a.turno_inicio, ativo(a) ? null : a.ultimo); }
+function nomeHarness(id) { return ((ultimo && ultimo.harnesses) || []).find(h => h.id === id)?.nome || id; }
+function todosAgentes(sessoes) { return sessoes.flatMap(s => [s, ...s.subagentes, ...s.workflows.flatMap(w => w.agentes)]); }
+function copia(texto) { navigator.clipboard?.writeText(texto).catch(() => { /* sem permissão: nada a fazer */ }); }
+
+// ---------------------------------------------------------------- leitura em voz alta
+// Dois motores: a voz do navegador (Web Speech API) e as vozes locais (Piper, Kokoro), que o servidor gera em WAV.
+
+const fala = "speechSynthesis" in window ? window.speechSynthesis : null;
+const TAXAS = [0.8, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+let taxa = Number(guardado("monitor.taxa", 1)) || 1;
+let vozesLocais = [];  // /api/vozes: [{id: "<motor>:<voz>", nome, motor}]
+let leitura = null;    // { dono, rotulo, partes: [{texto, p}], i, pausado, audio, gerando, fila: i -> promessa do Audio }
+const podeFalar = () => Boolean(fala || vozesLocais.length);
+function seletorTaxa(attrs) {
+  return el("select", Object.assign({ "aria-label": "Velocidade da leitura", onchange: ev => mudaTaxa(Number(ev.target.value)) }, attrs),
+    TAXAS.map(t => el("option", { value: String(t), selected: t === taxa }, String(t).replace(".", ",") + "×")));
+}
+function mudaTaxa(valor) {
+  taxa = valor;
+  guarda("monitor.taxa", taxa);
+  document.getElementById("taxa").value = String(taxa);
+  rotuloVoz();
+  if (!leitura) return;
+  if (!escolha().startsWith("web:")) { if (leitura.audio) leitura.audio.playbackRate = taxa; }  // voz local: na hora
+  else recomeca();  // a do navegador recomeça o trecho no ritmo novo
+}
+// A parte atual de novo, com a voz e a velocidade escolhidas agora.
+function recomeca() {
+  if (!leitura) return;
+  const antiga = leitura;
+  leitura = Object.assign({}, antiga, { pausado: false, audio: null, fila: new Map() });  // dono novo: o fim da fala cortada não avança
+  antiga.audio?.pause();
+  fala?.cancel();
+  fala?.resume();
+  falaParte();
+}
+function vozesNavegador() { return fala ? fala.getVoices().filter(v => /^pt/i.test(v.lang)) : []; }
+function escolha() { return document.getElementById("voz").value; }  // "web:<nome>" ou "<motor>:<voz>"
+function vozNavegador() {
+  const lista = vozesNavegador(), nome = escolha().startsWith("web:") ? escolha().slice(4) : null;
+  return lista.find(v => v.name === nome) || lista.find(v => v.lang === "pt-BR" && /natural/i.test(v.name))
+    || lista.find(v => v.lang === "pt-BR") || lista[0] || null;
+}
+function nomeVoz() { return document.getElementById("voz").selectedOptions[0]?.textContent || "voz padrão"; }
+function rotuloVoz() {  // o botão Voz da tela estreita mostra a voz e a velocidade escolhidas
+  const texto = nomeVoz().replace(/ · .*$/, "") + " · " + String(taxa).replace(".", ",") + "×";
+  document.getElementById("rotulo-botao-voz").textContent = texto;
+  document.getElementById("abrir-voz").setAttribute("aria-label", "Voz e avisos: " + texto);
+}
+function preencheVozes() {
+  const sel = document.getElementById("voz"), web = vozesNavegador();
+  let padrao = guardado("monitor.voz", null);
+  if (padrao && !padrao.includes(":")) padrao = "web:" + padrao;  // guardado antes das vozes locais: só o nome
+  const motores = [...new Set(vozesLocais.map(v => v.motor))];
+  const grupos = [
+    web.length ? el("optgroup", { label: "Navegador" }, web.map(v => el("option", { value: "web:" + v.name },
+      v.name.replace(/^Microsoft /, "").replace(/ - .*$/, "") + " · " + v.lang))) : null,
+    ...motores.map(m => el("optgroup", { label: m + " (local)" },
+      vozesLocais.filter(v => v.motor === m).map(v => el("option", { value: v.id }, v.nome)))),
+  ].filter(Boolean);
+  sel.replaceChildren(...(grupos.length ? grupos : [el("option", { value: "" }, "nenhuma voz")]));
+  if ([...sel.options].some(o => o.value === padrao)) sel.value = padrao;
+  else if (vozNavegador()) sel.value = "web:" + vozNavegador().name;
+  rotuloVoz();
+}
+async function carregaVozesLocais() {
+  try {
+    const r = await fetch("/api/vozes");
+    if (r.ok) { vozesLocais = (await r.json()).vozes; preencheVozes(); aquece("Olá."); desenha(); }
+  } catch (_) { /* sem servidor: fica só a voz do navegador */ }
+}
+function limpaTexto(s) {
+  return s.replace(/```[\s\S]*?```/g, " trecho de código. ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*`]+/g, "").replace(/[#>|]+/g, " ").replace(/\s+/g, " ").trim();
+}
+// O texto vira trechos de uma ou poucas frases: o áudio começa depois da primeira, não do parágrafo inteiro.
+// p = o parágrafo do trecho, para marcar o que está sendo lido.
+function partesDe(texto) {
+  return texto.split(/\n\s*\n/).flatMap((paragrafo, p) => {
+    const trechos = [];
+    for (const frase of limpaTexto(paragrafo).split(/(?<=[.!?…:;])\s+/).filter(Boolean)) {
+      if (trechos.length && trechos[trechos.length - 1].length < 40) trechos[trechos.length - 1] += " " + frase;
+      else trechos.push(frase);
+    }
+    return trechos.map(t => ({ texto: t, p, palavras: palavras(t) }));
+  });
+}
+function ouvir(dono, rotulo, texto) {
+  if (!podeFalar() || !texto) return;
+  if (leitura && leitura.dono === dono) return alternaPausa();
+  const antiga = leitura;
+  leitura = { dono, rotulo, partes: partesDe(texto), i: 0, pausado: false, fila: new Map() };
+  antiga?.audio?.pause();
+  fala?.cancel();  // depois de trocar a leitura: o fim da fala cortada não avança a leitura nova
+  falaParte();
+}
+function falaParte() {
+  const atual = leitura;
+  if (!atual) return;
+  if (atual.i >= atual.partes.length) return paraLeitura();
+  Object.assign(atual, { palavra: -1, fronteira: false, desde: performance.now(), web: escolha().startsWith("web:") || !escolha() });
+  acompanha();
+  const proxima = () => { if (leitura === atual) { atual.i++; falaParte(); } };
+  if (escolha().startsWith("web:") || !escolha()) {
+    const u = new SpeechSynthesisUtterance(atual.partes[atual.i].texto), voz = vozNavegador();
+    if (voz) u.voice = voz;
+    u.lang = voz ? voz.lang : "pt-BR";
+    u.rate = taxa;
+    u.onend = u.onerror = proxima;  // cancel() também dispara: o dono mudou e nada avança
+    u.onstart = () => { atual.desde = performance.now(); };
+    u.onboundary = ev => {  // a voz diz o caractere em que está: é a palavra exata
+      if (leitura !== atual || (ev.name && ev.name !== "word")) return;
+      atual.fronteira = true;
+      marca(palavraNoCaractere(atual.partes[atual.i], ev.charIndex));
+    };
+    fala.speak(u);
+  } else {
+    tocaLocal(atual, escolha(), proxima);
+  }
+  desenhaPlayer();
+  desenha();
+}
+function gera(voz, texto) {  // promessa do WAV gerado pelo servidor, já num Audio carregando
+  return fetch("/api/falar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voz, texto }) })
+    .then(r => r.ok ? r.blob() : Promise.reject(new Error("HTTP " + r.status)))
+    .then(b => { const a = new Audio(URL.createObjectURL(b)); a.preload = "auto"; return a; });
+}
+// Os próximos trechos são gerados em fila, um de cada vez e na ordem, enquanto o atual toca.
+const ADIANTE = 3;
+function enfileira(atual, voz) {
+  for (let j = atual.i; j < Math.min(atual.partes.length, atual.i + 1 + ADIANTE); j++) {
+    if (atual.fila.has(j)) continue;
+    const anterior = atual.fila.get(j - 1) || Promise.resolve();
+    const p = anterior.catch(() => null).then(() => leitura === atual ? gera(voz, atual.partes[j].texto) : Promise.reject(new Error("parou")));
+    p.catch(() => { /* quem tocar o trecho trata a falha */ });
+    atual.fila.set(j, p);
+  }
+}
+async function tocaLocal(atual, voz, proxima) {
+  Object.assign(atual, { audio: null, gerando: true });
+  enfileira(atual, voz);
+  desenhaPlayer();
+  let audio;
+  try { audio = await atual.fila.get(atual.i); }
+  catch (_) { if (leitura === atual) paraLeitura(); return; }  // o motor falhou: para em vez de pular o texto calado
+  atual.fila.delete(atual.i);
+  if (leitura !== atual) return;  // descartado; revogar agora cortaria a carga que o Audio ainda faz
+  atual.audio = audio;
+  audio.playbackRate = taxa;
+  audio.onended = audio.onerror = () => { URL.revokeObjectURL(audio.src); proxima(); };
+  atual.gerando = false;
+  if (!atual.pausado) audio.play().catch(() => { /* o navegador recusou tocar: o botão de pausa retoma */ });
+  desenhaPlayer();
+}
+// Aquece a voz local: o primeiro pedido sobe o motor, e o trecho gerado fica no cache do servidor.
+const aquecidos = new Set();
+function aquece(texto) {
+  const voz = escolha(), primeiro = partesDe(texto)[0];
+  if (!voz || voz.startsWith("web:") || !primeiro || aquecidos.has(voz + "|" + primeiro.texto)) return;
+  aquecidos.add(voz + "|" + primeiro.texto);
+  fetch("/api/falar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voz, texto: primeiro.texto }) })
+    .then(r => { if (!r.ok) aquecidos.delete(voz + "|" + primeiro.texto); }, () => aquecidos.delete(voz + "|" + primeiro.texto));
+}
+function alternaPausa() {
+  if (!leitura) return;
+  leitura.pausado = !leitura.pausado;
+  if (leitura.pausado) leitura.pausouEm = performance.now();
+  else if (leitura.pausouEm) leitura.desde += performance.now() - leitura.pausouEm;  // a estimativa não conta a pausa
+  if (leitura.audio) { if (leitura.pausado) leitura.audio.pause(); else leitura.audio.play().catch(() => {}); }
+  else if (fala) { if (leitura.pausado) fala.pause(); else fala.resume(); }
+  desenhaPlayer();
+  desenha();
+}
+function paraLeitura() {
+  const antiga = leitura;
+  leitura = null;
+  antiga?.audio?.pause();
+  fala?.cancel();
+  desenhaPlayer();
+  desenha();
+}
+function testaVoz() {
+  ouvir("teste-voz", "teste da voz", "Olá! Esta é a voz " + nomeVoz().replace(/ · .*$/, "")
+    + ". É assim que eu vou ler as conclusões dos seus agentes.");
+}
+function botaoOuvir(dono, rotulo, texto, classe) {
+  const tocando = leitura && leitura.dono === dono;
+  return el("button", { class: classe || "icone", disabled: !podeFalar() || !texto,
+      "aria-label": (tocando ? (leitura.pausado ? "Continuar: " : "Pausar: ") : "Ouvir: ") + rotulo,
+      onclick: ev => { ev.stopPropagation(); ouvir(dono, rotulo, texto); } },
+    icone(tocando && !leitura.pausado ? "pausar" : "ouvir"));
+}
+function botaoOuvirTexto(dono, rotulo, texto, legenda, primario) {
+  const tocando = leitura && leitura.dono === dono;
+  const [nome, rot] = !tocando ? ["ouvir", legenda] : leitura.pausado ? ["tocar", "Continuar"] : ["pausar", "Pausar"];
+  return el("button", { class: "botao" + (primario ? " primario" : ""), disabled: !podeFalar() || !texto,
+    onclick: ev => { ev.stopPropagation(); ouvir(dono, rotulo, texto); } }, icone(nome), rot);
+}
+function desenhaPlayer() {
+  const p = document.getElementById("player");
+  p.hidden = !leitura;
+  if (!leitura) return p.replaceChildren();
+  const n = leitura.partes.length;
+  p.replaceChildren(
+    el("button", { class: "redondo", "aria-label": leitura.pausado ? "Continuar a leitura" : "Pausar a leitura", onclick: alternaPausa },
+      icone(leitura.pausado ? "tocar" : "pausar", 18)),
+    el("button", { class: "redondo secundario", "aria-label": "Parar a leitura", onclick: paraLeitura }, icone("parar", 14)),
+    el("div", { class: "info" },
+      el("div", { class: "corta" }, el("b", null, "Lendo: " + leitura.rotulo),
+        el("span", { class: "t2" }, "  ·  trecho " + (leitura.i + 1) + " de " + n + (leitura.gerando ? "  ·  gerando a voz…" : ""))),
+      el("div", { class: "corta", id: "player-trecho", "aria-hidden": "true" }),
+      el("span", { class: "barra" }, el("i", { style: "width: " + Math.round((leitura.i + 1) / n * 100) + "%" }))),
+    seletorTaxa({ id: "taxa-player" }),
+    el("span", { class: "t2" }, nomeVoz()));
+  pintaTrecho();
+}
+
+// ---------------------------------------------------------------- a palavra que está sendo lida
+// A voz do navegador diz onde está (o boundary, com o caractere). A voz local manda só o áudio: a palavra sai da fração
+// já tocada do trecho, pesada pelo tamanho de cada palavra e pelas pausas da pontuação; a voz do navegador sem boundary
+// (as de rede do Chrome) sai do tempo, a ~14 caracteres por segundo. O campo que mostra o texto (data-leitura = o dono
+// da leitura) ganha o destaque pela CSS Custom Highlight API, sem mexer no DOM; o player mostra a frase com a palavra,
+// para quando o campo está cortado ou fora da tela.
+function palavras(texto) { return [...texto.matchAll(/\S+/g)].map(m => ({ w: m[0], inicio: m.index, fim: m.index + m[0].length })); }
+function normal(w) { return w.toLowerCase().normalize("NFD").replace(/[^\p{L}\p{N}]/gu, ""); }
+function palavraNoCaractere(parte, c) {
+  let k = 0;
+  while (k + 1 < parte.palavras.length && parte.palavras[k + 1].inicio <= c) k++;
+  return k;
+}
+function palavraNaFracao(parte, fracao) {
+  const pesos = parte.palavras.map(x => normal(x.w).length + 1 + (/[.!?…]$/.test(x.w) ? 6 : /[,;:]$/.test(x.w) ? 3 : 0));
+  const total = pesos.reduce((a, b) => a + b, 0) || 1;
+  let soma = 0;
+  for (let k = 0; k < pesos.length; k++) if ((soma += pesos[k]) / total >= fracao) return k;
+  return pesos.length - 1;
+}
+let acompanhando = false;
+function acompanha() {  // um laço por quadro enquanto há leitura: a voz local e a estimativa andam por aqui
+  if (!leitura) { acompanhando = false; return; }
+  if (!acompanhando) { acompanhando = true; return requestAnimationFrame(passo); }
+}
+function passo() {
+  if (!leitura) { acompanhando = false; return; }
+  const parte = leitura.partes[leitura.i], a = leitura.audio;
+  if (parte && a && a.duration) marca(palavraNaFracao(parte, a.currentTime / a.duration));
+  else if (parte && leitura.web && !leitura.fronteira && !leitura.pausado && performance.now() - leitura.desde > 400)
+    marca(palavraNaFracao(parte, Math.min(1, (performance.now() - leitura.desde) / 1000 * 14 * taxa / parte.texto.length)));
+  requestAnimationFrame(passo);
+}
+function marca(k) {
+  if (!leitura || leitura.palavra === k) return;
+  leitura.palavra = k;
+  aplicaDestaque();
+  pintaTrecho();
+}
+function pintaTrecho() {
+  const alvo = document.getElementById("player-trecho"), parte = leitura?.partes[leitura.i];
+  if (!alvo || !parte) return;
+  const k = leitura.palavra, ws = parte.palavras.map(x => x.w);
+  if (k < 0) return alvo.replaceChildren(parte.texto);
+  alvo.replaceChildren((k > 6 ? "… " : "") + ws.slice(Math.max(0, k - 6), k).join(" ") + " ", el("mark", null, ws[k]),
+    " " + ws.slice(k + 1).join(" "));
+}
+// As palavras do campo como estão na tela, cada uma com o nó e o deslocamento do começo e do fim: o texto de um campo
+// com negrito, código e link vem partido em vários nós.
+function palavrasDoCampo(bloco) {
+  const nos = [], partes = [];
+  let total = 0;
+  const w = document.createTreeWalker(bloco, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) { nos.push([n, total]); partes.push(n.data); total += n.data.length; }
+  const onde = pos => { let k = nos.length - 1; while (k > 0 && nos[k][1] > pos) k--; return [nos[k][0], pos - nos[k][1]]; };
+  return [...partes.join("").matchAll(/\S+/g)].map(m => ({ w: m[0], inicio: onde(m.index), fim: onde(m.index + m[0].length) }));
+}
+// A fala e a tela não têm as mesmas palavras (o markdown sai da fala, o bloco de código vira "trecho de código"): casa
+// cada palavra falada com a próxima igual na tela, olhando 8 à frente; um salto maior só vale confirmado pela palavra
+// seguinte. A faixa é a da palavra atual, e nada se ela não casou.
+function faixa(bloco, faladas) {
+  const tela = palavrasDoCampo(bloco);
+  let r = 0, atual = null;
+  for (let s = 0; s < faladas.length; s++) {
+    const w = normal(faladas[s].w);
+    if (!w) continue;
+    let k = -1;
+    for (let j = r; j < Math.min(tela.length, r + 8) && k < 0; j++) if (normal(tela[j].w) === w) k = j;
+    const prox = s + 1 < faladas.length ? normal(faladas[s + 1].w) : null;
+    for (let j = r + 8; k < 0 && prox && j < tela.length - 1; j++) if (normal(tela[j].w) === w && normal(tela[j + 1].w) === prox) k = j;
+    if (k >= 0) r = k + 1;
+    atual = k >= 0 ? tela[k] : (s === faladas.length - 1 ? null : atual);
+  }
+  if (!atual) return null;
+  const range = document.createRange();
+  range.setStart(...atual.inicio);
+  range.setEnd(...atual.fim);
+  return range;
+}
+function aplicaDestaque() {
+  if (!window.CSS?.highlights) return;  // navegador sem a API: fica só a frase do player
+  CSS.highlights.delete("lendo");
+  const parte = leitura?.partes[leitura.i];
+  if (!parte || leitura.palavra < 0) return;
+  const campo = document.querySelector('[data-leitura="' + CSS.escape(leitura.dono) + '"]');
+  if (!campo) return;
+  const blocos = campo.querySelectorAll(":scope > p");  // a conclusão: um <p> por parágrafo, como a fala os parte
+  const bloco = blocos.length ? blocos[parte.p] : campo;
+  if (!bloco) return;
+  const faladas = leitura.partes.slice(0, leitura.i).filter(x => !blocos.length || x.p === parte.p).flatMap(x => x.palavras)
+    .concat(parte.palavras.slice(0, leitura.palavra + 1));
+  const r = faixa(bloco, faladas);
+  if (r) CSS.highlights.set("lendo", new Highlight(r));
+}
+
+// ---------------------------------------------------------------- ações
+
+function alternaAgente(id) {
+  if (abertos.has(id)) abertos.delete(id); else { abertos.add(id); buscaEventos(id); }
+  const s = ultimo?.sessoes.find(x => x.id === id);
+  if (s?.status === "finalizado" && lidas[id] !== s.ultimo) { lidas[id] = s.ultimo; guarda("monitor.lidas", lidas); }  // abriu: lida
+  desenha();
+}
+function alternaEvento(chave) {
+  if (eventosAbertos.has(chave)) eventosAbertos.delete(chave); else eventosAbertos.add(chave);
+  desenha();
+}
+// O espelho do terminal: a tela do pane da sessão, relida a cada consulta enquanto estiver aberto.
+const telas = {}, telasAbertas = new Set();
+async function buscaTela(id) {
+  try {
+    const r = await fetch("/api/tela?sessao=" + encodeURIComponent(id));
+    const texto = r.ok ? (await r.json()).texto : "Não deu para ler a tela agora.";
+    if (texto !== telas[id]) { telas[id] = texto; desenha(); }
+  } catch (_) { /* a próxima consulta tenta de novo */ }
+}
+// Ditado: o reconhecimento de voz do navegador escreve na caixa; no Edge e no Chrome o áudio vai para a nuvem.
+const Reconhece = window.SpeechRecognition || window.webkitSpeechRecognition;
+function dita(s) {
+  const r = new Reconhece();
+  r.lang = "pt-BR";
+  r.onresult = ev => {
+    rascunhos[s.id] = ((rascunhos[s.id] || "") + " " + ev.results[0][0].transcript).trim();
+    delete retorno[s.id];
+    desenha();
+    document.getElementById("texto:" + s.id)?.focus();
+  };
+  r.onerror = ev => { retorno[s.id] = "ditado: " + ev.error; desenha(); };
+  r.onend = () => { if (retorno[s.id] === "ouvindo…") { delete retorno[s.id]; desenha(); } };
+  retorno[s.id] = "ouvindo…";
+  desenha();
+  r.start();
+}
+function escolhe(chave) {
+  filtro = chave === "todos" || filtro === chave ? null : chave;
+  desenha();
+}
+function vaiPara(id) {  // abre a sessão e rola até ela: é o clique na notificação
+  abertos.add(id);
+  buscaEventos(id);
+  desenha();
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+const TOKEN = document.querySelector('meta[name="monitor-token"]').content;  // o servidor põe o desta execução na página
+// Escrever, responder e interromper: o servidor repassa ao clawd-panel, que age no pane do herdr da sessão.
+const rascunhos = {};  // id da sessão -> texto sendo escrito: o redesenho recria a caixa, e o texto fica
+const retorno = {};    // id da sessão -> como foi a última ação ("enviado ✓", o erro)
+async function age(rota, corpo, depois) {
+  const id = corpo.sessao;
+  retorno[id] = "enviando…";
+  desenha();
+  try {
+    const r = await fetch(rota, { method: "POST", headers: { "Content-Type": "application/json", "X-Monitor": TOKEN }, body: JSON.stringify(corpo) });
+    const d = await r.json().catch(() => ({}));
+    const foi = r.ok && d.enviado;
+    retorno[id] = foi ? "enviado ✓" : r.status === 409 ? "a pergunta mudou na tela; confira de novo" : "não enviou: " + (d.erro || d.error || "HTTP " + r.status);
+    if (foi && depois) depois();
+  } catch (_) {
+    retorno[id] = "não enviou: o monitor está fora do ar";
+  }
+  desenha();
+  setTimeout(() => { if (retorno[id] && !retorno[id].endsWith("…")) { delete retorno[id]; desenha(); } }, 5000);
+}
+const textosEventos = {};  // id do agente -> último texto de /api/eventos: igual, nada a redesenhar
+async function buscaEventos(id) {
+  try {
+    const r = await fetch("/api/eventos?agente=" + encodeURIComponent(id));
+    const texto = r.ok ? await r.text() : null;
+    if (texto === null || texto === textosEventos[id]) return;
+    textosEventos[id] = texto;
+    eventos[id] = JSON.parse(texto);
+    desenha();
+  } catch (_) { /* a próxima consulta tenta de novo */ }
+}
+
+// ---------------------------------------------------------------- peças
+
+function estado(a) {
+  return el("span", { class: "forte st-" + a.status, style: "font-size: 13px" }, SIMBOLO[a.status], el("span", { class: "rotulo" }, " " + ROTULO[a.status]));
+}
+// O rótulo da linha "fazendo": finalizado não tem.
+function acao(a) { return a.status === "esperando" ? (a.pergunta ? "pergunta" : "travou em") : a.status === "trabalhando" ? "fazendo" : null; }
+function textoOuvir(a) { return a.fazendo ? (acao(a) ? acao(a) + ": " : "") + a.fazendo : ""; }
+// Verde, laranja ou vermelho: "alto" a partir de `alto`%, "medio" a partir de `medio`%.
+function nivel(pct, medio, alto) { return pct >= alto ? "alto" : pct >= medio ? "medio" : "baixo"; }
+// O contexto é só a porcentagem da janela, na cor do nível; os tokens ficam no título. Sem janela conhecida, só o traço.
+function pctContexto(a) { return a.tokens && a.janela ? Math.min(100, Math.round(a.tokens / a.janela * 100)) : null; }
+function contexto(a) {
+  const pct = pctContexto(a);
+  if (pct === null) return el("span", { class: "ctx t3", title: a.tokens ? mil(a.tokens) + " tokens" : null }, "—");
+  return el("span", { class: "ctx nivel-" + nivel(pct, 50, 80), title: mil(a.tokens) + " de " + janelaCurta(a.janela) + " tokens" },
+    el("span", { class: "barra" }, el("i", { style: "width: " + pct + "%" })), pct + "%");
+}
+// No cartão, o contexto é o número grande, com a barra embaixo na largura toda.
+function contextoGrande(a) {
+  const pct = pctContexto(a);
+  if (pct === null) return el("span", { class: "ctx-grande t3" }, el("b", { class: "pct" }, "—"), "contexto");
+  return el("span", { class: "ctx-grande nivel-" + nivel(pct, 50, 80), title: mil(a.tokens) + " de " + janelaCurta(a.janela) + " tokens" },
+    el("b", { class: "pct" }, pct + "%"), el("span", { class: "t3" }, "de contexto"),
+    el("span", { class: "barra" }, el("i", { style: "width: " + pct + "%" })));
+}
+// A etiqueta do modelo leva a cor da família: opus, sonnet, haiku, fable, gpt, gemini.
+function classeModelo(m) {
+  const familia = ["opus", "sonnet", "haiku", "fable", "gpt", "gemini"].find(f => (m || "").toLowerCase().includes(f));
+  return "modelo mono corta" + (familia ? " m-" + familia : "");
+}
+// Trabalhando sem nada a mostrar ainda: o círculo gira. O redesenho de 2 s recria o círculo; o atraso negativo
+// pelo relógio mantém a volta no mesmo ponto, sem pulo.
+function girando() { return el("span", { class: "girando", "aria-hidden": "true", style: "animation-delay: -" + Date.now() % 800 + "ms" }); }
+function processando() { return [girando(), "processando…"]; }
+function linhaFazendo(a) {
+  if (!a.fazendo && a.status === "trabalhando") return el("span", { class: "fazendo t2" }, processando());
+  if (!a.fazendo) return el("span", { class: "fazendo t3" }, "sem atividade");
+  return el("span", { class: "fazendo" + (a.status === "finalizado" ? " t2" : ""), "data-leitura": "fazendo:" + a.id },
+    acao(a) ? el("span", { class: "forte st-" + a.status }, acao(a) + ": ") : null, a.fazendo);
+}
+
+// A pergunta que está na tela do agente, com as opções dela: o mesmo que o ESP32 responde pelo toque.
+function blocoResposta(s) {
+  const b = s.bloqueio;
+  return el("div", { class: "resposta", onclick: ev => ev.stopPropagation() },
+    el("span", { class: "pergunta" }, "◆ " + (b.pergunta || "O agente espera uma resposta na tela.")),
+    b.opcoes.length ? el("div", { class: "opcoes", role: "group", "aria-label": "Opções da pergunta" },
+      b.opcoes.map(o => el("button", { class: "botao opcao", id: "opcao:" + s.id + ":" + o.n,
+        onclick: () => age("/api/responder", { sessao: s.id, n: o.n, rotulo: o.rotulo }) }, o.n + ". " + o.rotulo))) : null);
+}
+// Escrever para o agente: uma linha com Enter, e os comandos de uso comum. /clear e Interromper pedem confirmação.
+function blocoComando(s) {
+  const envia = () => {
+    const texto = (rascunhos[s.id] || "").trim();
+    if (texto) age("/api/enviar", { sessao: s.id, texto }, () => { delete rascunhos[s.id]; });
+  };
+  const claude = s.harness === "claude-code";
+  return el("div", { class: "comando", onclick: ev => ev.stopPropagation() },
+    el("input", { class: "caixa", id: "texto:" + s.id, type: "text", value: rascunhos[s.id] || "", maxLength: 4000,
+      placeholder: "Escrever para " + s.projeto + "…", "aria-label": "Mensagem para " + s.projeto,
+      oninput: ev => { rascunhos[s.id] = ev.target.value; }, onkeydown: ev => { if (ev.key === "Enter") envia(); } }),
+    Reconhece ? el("button", { class: "icone", "aria-label": "Ditar a mensagem", title: "Ditado: o áudio vai para o serviço de voz do navegador",
+      onclick: () => dita(s) }, icone("microfone")) : null,
+    el("button", { class: "botao primario", id: "enviar:" + s.id, onclick: envia }, "Enviar"),
+    claude ? el("button", { class: "botao", onclick: () => age("/api/enviar", { sessao: s.id, texto: "/compact" }) }, "/compact") : null,
+    claude ? el("button", { class: "botao", onclick: () => confirm("Apagar o contexto de " + s.projeto + " com /clear?")
+      && age("/api/enviar", { sessao: s.id, texto: "/clear" }) }, "/clear") : null,
+    s.urgente !== "finalizado" ? el("button", { class: "botao", onclick: () => confirm("Interromper " + s.projeto + " (Esc)?")
+      && age("/api/interromper", { sessao: s.id }) }, "Interromper") : null,
+    retorno[s.id] ? el("span", { class: "t3 retorno", role: "status" }, retorno[s.id]) : null);
+}
+
+// Sessão fechada que não espera você: um cartão na grade. Trabalhando, gira e conta o turno, com o contexto em número
+// grande; finalizada, fica menor: diz há quanto terminou, mostra a conclusão e fica "nova" até você abrir.
+function cartao(s, harness) {
+  const alterna = () => alternaAgente(s.id), fim = s.urgente === "finalizado";
+  const filhos = todosAgentes([s]).slice(1), vivos = filhos.filter(ativo), prontos = filhos.length - vivos.length;
+  const modelo = el("span", { class: classeModelo(s.modelo), style: "font-size: 12px", title: s.modelo || "" },
+    modeloCurto(s.modelo) + (s.janela && !fim ? " · " + janelaCurta(s.janela) : ""));
+  return el("section", { class: "sessao cartao" + (fim ? " fim" : ""), id: s.id, "aria-label": s.projeto, onclick: alterna },
+    el("div", { class: "topo-cartao" },
+      s.status === "trabalhando" ? el("span", { class: "forte st-trabalhando", style: "font-size: 13px" }, girando(), "trabalhando") : estado(s),
+      fim && lidas[s.id] !== s.ultimo ? el("span", { class: "nova" }, "nova") : null,
+      el("span", { class: "espaco" }),
+      ativo(s) ? relogio("turno ", s.turno_inicio) : relogio("há ", s.ultimo)),
+    el("span", { class: "projeto corta", title: s.titulo || s.projeto }, s.projeto),
+    fim ? null : modelo,
+    fim ? null : contextoGrande(s),
+    linhaFazendo(s),
+    filhos.length && !fim ? el("div", { class: "chips" },
+      vivos.map(a => el("span", { class: "chip corta", title: a.fazendo || "" }, el("span", { class: "st-" + a.status }, SIMBOLO[a.status]),
+        " " + (a.nome || "subagente"))),
+      prontos ? el("span", { class: "chip t2" }, el("span", { class: "st-finalizado" }, "✓"), " " + plural(prontos, "finalizado", "finalizados")) : null) : null,
+    el("div", { class: "rodape-cartao" },
+      fim ? [modelo, contexto(s)] : relogio("sessão ", s.inicio),
+      harness && !fim ? el("span", null, "· " + harness) : null,  // na finalizada, o rodapé fica só com o modelo e o contexto
+      el("span", { class: "espaco" }),
+      el("span", { class: "acoes" }, botaoOuvir("fazendo:" + s.id, s.projeto, textoOuvir(s)),
+        el("button", { class: "icone", id: "abrir:" + s.id, "aria-expanded": "false", "aria-label": "Abrir a conclusão e os eventos de " + s.projeto,
+          onclick: ev => { ev.stopPropagation(); alterna(); } }, icone("abrir")))));
+}
+
+// Aberta, ou esperando você: o card ocupa a linha inteira da grade, com a pergunta, a caixa de escrever e o que abriu.
+function blocoSessao(s, harness) {
+  const aberto = abertos.has(s.id), alterna = () => alternaAgente(s.id);
+  if (!aberto && s.urgente !== "esperando") return cartao(s, harness);
+  const subs = s.subagentes;
+  const wfs = s.workflows.filter(w => w.agentes.length);
+  const filhos = subs.concat(wfs.flatMap(w => w.agentes));
+  const plano = s.plano && s.plano.itens.length ? el("span", { class: "plano" },
+    "Plano " + s.plano.itens.filter(i => i.estado === "feito").length + "/" + s.plano.itens.length,
+    s.plano.proximo ? [" · próximo: ", el("b", null, s.plano.proximo)] : null) : null;
+  return el("section", { class: "sessao" + (s.urgente === "esperando" ? " espera" : ""), id: s.id, "aria-label": s.projeto },
+    el("div", { class: "cab", onclick: alterna },
+      estado(s),
+      el("span", { class: "corta" }, el("span", { class: "projeto" }, s.projeto),
+        s.titulo && s.titulo !== s.projeto ? el("span", { class: "titulo" }, s.titulo) : null),
+      el("span", { class: classeModelo(s.modelo), style: "font-size: 13px", title: s.modelo || "" },
+        modeloCurto(s.modelo) + (s.janela ? " · " + janelaCurta(s.janela) : "")),
+      el("span", { class: "metricas" },
+        el("span", null, el("span", { class: "rotulinho" }, "contexto"), contexto(s)),
+        el("span", null, el("span", { class: "rotulinho" }, "sessão"), relogio("", s.inicio)),
+        el("span", null, el("span", { class: "rotulinho" }, "turno"), tempoTurno(s)),
+        harness ? el("span", null, el("span", { class: "rotulinho" }, "harness"), harness) : null),
+      el("span", { class: "acoes" }, botaoOuvir("fazendo:" + s.id, s.projeto, textoOuvir(s)),
+        el("button", { class: "icone", id: "abrir:" + s.id, "aria-expanded": String(aberto),
+          "aria-label": (aberto ? "Fechar" : "Abrir") + " a conclusão e os eventos de " + s.projeto,
+          onclick: ev => { ev.stopPropagation(); alterna(); } }, icone(aberto ? "fechar" : "abrir")))),
+    el("div", { class: "linha-fazendo", onclick: alterna }, linhaFazendo(s),
+      s.prompt ? el("span", { class: "prompt corta" }, "pedido: “" + s.prompt + "”") : null, plano),
+    s.bloqueio ? blocoResposta(s) : null,
+    s.pane && (aberto || s.urgente === "esperando") ? blocoComando(s)
+      : aberto ? el("div", { class: "comando t3", style: "font-size: 13px" }, "Sem pane do herdr: esta sessão é só leitura.") : null,
+    aberto ? corpoAberto(s) : null,
+    filhos.length ? tabelaSubagentes(s, subs, wfs, filhos.filter(a => a.status === "finalizado")) : null);
+}
+// Os subagentes que ainda trabalham ficam à mostra; os finalizados se recolhem sozinhos numa linha que abre.
+const subsAbertos = new Set();  // sessões com os subagentes finalizados à mostra
+function tabelaSubagentes(s, subs, wfs, finalizados) {
+  const vivo = a => a.status !== "finalizado", mostra = subsAbertos.has(s.id);
+  return el("div", { class: "subs" },
+    subs.filter(vivo).map(linhaAgente),
+    wfs.map(w => w.agentes.some(vivo) ? [el("div", { class: "wf" }, "Workflow ", el("b", null, w.nome), " · fase ", el("b", null, w.fase || "?"),
+      " · " + plural(w.agentes.length, "agente", "agentes")), w.agentes.filter(vivo).map(linhaAgente)] : null),
+    finalizados.length ? el("button", { class: "recolhe-subs", id: "subs:" + s.id, "aria-expanded": String(mostra),
+      onclick: () => { if (mostra) subsAbertos.delete(s.id); else subsAbertos.add(s.id); desenha(); } },
+      (mostra ? "▾ " : "▸ ") + "✓ " + plural(finalizados.length, "subagente finalizado", "subagentes finalizados")) : null,
+    mostra ? finalizados.map(linhaAgente) : null);
+}
+function linhaAgente(a) {
+  const aberto = abertos.has(a.id), nome = a.nome || "subagente";
+  return [
+    el("div", { class: "cols ag" + (aberto ? " aberto" : ""), onclick: () => alternaAgente(a.id) },
+      estado(a),
+      el("span", { class: "nome-ag" },
+        el("button", { class: "forte corta", id: a.id, "aria-expanded": String(aberto), title: nome,
+          onclick: ev => { ev.stopPropagation(); alternaAgente(a.id); } }, (aberto ? "▾ " : "▸ ") + nome),
+        a.funcao ? el("span", { class: "funcao corta", title: a.funcao }, a.funcao) : null),
+      el("span", { class: classeModelo(a.modelo), title: a.modelo || "" }, modeloCurto(a.modelo)),
+      contexto(a),
+      relogio("", a.inicio, a.status === "finalizado" ? a.ultimo : null),
+      el("span", { class: "corta" + (a.status === "finalizado" ? " t2" : ""), title: a.fazendo || "" }, a.fazendo || (a.status === "trabalhando" ? processando() : "—"))),
+    aberto ? corpoAberto(a) : null];
+}
+
+// O markdown da fala vira formatação por nós do DOM, nunca por innerHTML: negrito, código, link (fica o texto) e título.
+function inline(texto) {
+  return texto.split(/(\*\*[^*]+\*\*|`[^`\n]+`|\[[^\]]+\]\([^)\s]*\))/).filter(Boolean).map(p =>
+    /^\*\*.+\*\*$/s.test(p) ? el("b", null, p.slice(2, -2))
+      : /^`.+`$/.test(p) ? el("code", null, p.slice(1, -1))
+      : /^\[.+\]\(.*\)$/.test(p) ? p.replace(/^\[([^\]]*)\]\(.*\)$/, "$1") : p);
+}
+function paragrafo(p, lendo) {
+  const titulo = /^#{1,6}\s+/.test(p);
+  return el("p", { class: lendo ? "lendo" : null }, titulo ? el("b", null, inline(p.replace(/^#{1,6}\s+/, ""))) : inline(p));
+}
+
+// Aberto: a última fala inteira (a conclusão, se o turno fechou) num bloco próprio; os eventos, o terminal e as falhas
+// de ferramenta do turno ficam fechados, cada um atrás do seu botão.
+const eventosVisiveis = new Set();  // agentes com a lista de eventos aberta
+const falhasVisiveis = new Set();   // agentes com as falhas do turno à mostra
+const arquivosVisiveis = new Set(); // agentes com os arquivos escritos no turno à mostra
+// O link do VS Code: vscode://file/<caminho absoluto>, com as barras para a frente.
+function linkVscode(c) { const u = c.replace(/\\/g, "/"); return "vscode://file" + (u.startsWith("/") ? "" : "/") + encodeURI(u); }
+function corpoAberto(a) {
+  const d = eventos[a.id];
+  if (!d) return el("div", { class: "aberto-corpo t3" }, "carregando...");
+  const conclusao = a.status === "finalizado", nome = a.nome || a.projeto, dono = "fala:" + a.id;
+  const paragrafos = d.fala ? d.fala.split(/\n\s*\n/) : [];
+  const lendo = leitura && leitura.dono === dono ? leitura.partes[leitura.i]?.p : -1;
+  if (d.fala) aquece(d.fala);
+  const linhas = linhasEventos(d.eventos).reverse(), telaAberta = telasAbertas.has(a.id), verEventos = eventosVisiveis.has(a.id);
+  const falhas = [a, ...(a.subagentes || []), ...(a.workflows || []).flatMap(w => w.agentes)].filter(x => x.falha), verFalhas = falhasVisiveis.has(a.id);
+  const arquivos = d.arquivos || [], verArquivos = arquivosVisiveis.has(a.id);
+  return el("div", { class: "aberto-corpo" },
+    d.fala ? el("article", { class: "conclusao", "aria-label": (conclusao ? "Conclusão de " : "Última fala de ") + nome },
+      el("div", { class: "topo" },
+        el("span", { class: "forte st-" + a.status }, conclusao ? "✓ Conclusão" : "Última fala"),
+        el("span", { class: "t2", style: "font-size: 13px" }, nome + " · " + hora(a.ultimo) + " · " + plural(paragrafos.length, "parágrafo", "parágrafos")),
+        el("span", { class: "espaco" }),
+        botaoOuvirTexto(dono, (conclusao ? "conclusão de " : "fala de ") + nome, d.fala, "Ouvir", true),
+        el("button", { class: "botao", onclick: ev => { ev.stopPropagation(); copia(d.fala); } }, icone("copiar"), "Copiar")),
+      el("div", { class: "texto", "data-leitura": dono }, paragrafos.map((p, i) => paragrafo(p, i === lendo)))) : null,
+    el("div", { class: "gavetas" },
+      el("button", { class: "botao", id: "eventos:" + a.id, "aria-expanded": String(verEventos), disabled: !linhas.length, onclick: () => {
+        if (verEventos) eventosVisiveis.delete(a.id); else eventosVisiveis.add(a.id);
+        desenha();
+      } }, icone(verEventos ? "fechar" : "abrir"), "Eventos · " + linhas.length),
+      a.pane ? el("button", { class: "botao", id: "tela:" + a.id, "aria-expanded": String(telaAberta), onclick: () => {
+        if (telaAberta) telasAbertas.delete(a.id); else { telasAbertas.add(a.id); buscaTela(a.id); }
+        desenha();
+      } }, icone(telaAberta ? "fechar" : "abrir"), "Terminal") : null,
+      arquivos.length ? el("button", { class: "botao", id: "arquivos:" + a.id, "aria-expanded": String(verArquivos), onclick: () => {
+        if (verArquivos) arquivosVisiveis.delete(a.id); else arquivosVisiveis.add(a.id);
+        desenha();
+      } }, icone(verArquivos ? "fechar" : "abrir"), "Arquivos · " + arquivos.length) : null,
+      falhas.length ? el("button", { class: "botao discreto", id: "falhas:" + a.id, "aria-expanded": String(verFalhas), onclick: () => {
+        if (verFalhas) falhasVisiveis.delete(a.id); else falhasVisiveis.add(a.id);
+        desenha();
+      } }, icone(verFalhas ? "fechar" : "abrir"), "Falhas de ferramenta · " + falhas.length) : null),
+    verEventos && linhas.length ? [el("span", { class: "t3", style: "font-size: 12px" }, "Do mais novo ao mais antigo"),
+      el("div", { class: "eventos" }, linhas.map(e => linhaEvento(a, e)))] : null,
+    telaAberta ? el("pre", { class: "tela", "aria-label": "Tela do terminal de " + nome }, telas[a.id] ?? "lendo…") : null,
+    verArquivos && arquivos.length ? el("div", { class: "arquivos", "aria-label": "Arquivos escritos no turno" }, arquivos.map(c =>
+      el("a", { class: "arquivo", href: linkVscode(c), title: "Abrir no VS Code: " + c },
+        el("span", { class: "nome-arquivo" }, c.split(/[\\/]/).pop()), el("span", { class: "t3 corta" }, c.replace(/[\\/][^\\/]*$/, ""))))) : null,
+    verFalhas && falhas.length ? el("div", { class: "falhas" }, falhas.map(x => el("span", { class: "falha-item", title: x.falha.texto },
+      el("b", null, hora(x.falha.ts) + (x === a ? "" : " · " + (x.nome || "subagente")) + " "), x.falha.texto))) : null);
+}
+// A chamada de ferramenta e o resultado dela têm o mesmo id: viram uma linha só, com a saída dentro.
+function linhasEventos(lista) {
+  const saida = e => (e.tipo === "resultado" || e.tipo === "erro") && e.id !== null && e.id !== undefined;
+  const resultados = new Map(lista.filter(saida).map(e => [e.id, e]));
+  const chamadas = new Set(lista.filter(e => e.tipo === "ferramenta").map(e => e.id));
+  return lista.filter(e => !(saida(e) && chamadas.has(e.id)))
+    .map(e => e.tipo === "ferramenta" ? Object.assign({}, e, { saida: resultados.get(e.id) }) : e);
+}
+const TIPO = { usuario: ["pedido", "tipo-usuario"], texto: ["fala", "t2"], mensagem: ["mensagem", "t2"], erro: ["erro", "tipo-erro"] };
+function linhaEvento(a, e) {
+  const chave = a.id + "|" + e.ts + "|" + e.tipo + "|" + (e.id ?? "") + "|" + e.texto.slice(0, 40);
+  const aberto = eventosAbertos.has(chave), ferramenta = e.tipo === "ferramenta", s = e.saida;
+  const [rotulo, classe] = ferramenta ? [e.nome, "tipo-ferramenta"] : TIPO[e.tipo] || ["saída", "t2"];
+  const texto = ferramenta ? e.descricao || e.texto : e.texto;
+  const falhou = s && s.tipo === "erro";
+  return [
+    el("div", { class: "ev" + (aberto ? " aberto" : ""), onclick: () => alternaEvento(chave) },
+      el("span", { class: "mono t3" }, hora(e.ts)),
+      el("span", { class: "corta " + classe, title: rotulo }, rotulo),
+      el("span", { class: "corta" + (ferramenta && e.descricao ? " forte" : ""), title: texto, "data-leitura": "ev:" + chave }, texto),
+      el("span", { class: "mono " + (falhou ? "falhou" : "t2"), style: "font-size: 12px; text-align: right" },
+        falhou ? "falhou" : ferramenta ? (s ? segundos(ms(s.ts) - ms(e.ts)) : "rodando") : ""),
+      botaoOuvir("ev:" + chave, "a linha", texto, "icone nu"),
+      el("button", { class: "icone nu", "aria-expanded": String(aberto), "aria-label": aberto ? "Recolher" : "Expandir",
+        onclick: ev => { ev.stopPropagation(); alternaEvento(chave); } }, icone(aberto ? "fechar" : "abrir"))),
+    aberto ? corpoEvento(chave, e) : null];
+}
+function corpoEvento(chave, e) {
+  if (e.tipo !== "ferramenta") {
+    return el("div", { class: "ev-corpo" }, el("div", { class: "livre", "data-leitura": "ev-todo:" + chave }, e.completo || e.texto),
+      el("div", { class: "botoes" }, botaoOuvirTexto("ev-todo:" + chave, "o evento", e.completo || e.texto, "Ouvir"),
+        el("button", { class: "botao", onclick: () => copia(e.completo || e.texto) }, icone("copiar"), "Copiar")));
+  }
+  const s = e.saida, linhas = s ? (s.completo.match(/\n/g) || []).length + 1 : 0;
+  return el("div", { class: "ev-corpo" },
+    e.descricao ? [el("span", { class: "legenda" }, "Descrição"), el("span", null, e.descricao)] : null,
+    el("span", { class: "legenda" }, "Comando"), el("pre", null, e.completo),
+    s ? [el("span", { class: "legenda" }, "Saída · " + plural(linhas, "linha", "linhas") + (s.tipo === "erro" ? " · falhou" : "")
+          + (s.completo.length >= 4000 ? " · cortada em 4000 caracteres" : "")),
+        el("pre", { class: s.tipo === "erro" ? "falhou" : null, "data-leitura": "saida:" + chave }, s.completo || "(vazia)")]
+      : el("span", { class: "t3" }, "Ainda sem saída."),
+    el("div", { class: "botoes" },
+      s && s.completo ? botaoOuvirTexto("saida:" + chave, "a saída", s.completo, "Ouvir a saída") : null,
+      el("button", { class: "botao", onclick: () => copia(e.completo) }, icone("copiar"), "Copiar comando")));
+}
+
+// ---------------------------------------------------------------- telas
+
+// A sessão conta pelo estado mais urgente dela ("urgente", do servidor): a que tem um subagente esperando é das que esperam.
+function desenhaCabecalho(e) {
+  const conta = st => e.sessoes.filter(s => s.urgente === st).length;  // conta sessões, como o resto da página
+  const parte = (st, rotulo, resto) => el("span", { class: "pilula " + (conta(st) ? "st-" + st : "t3") }, el("b", null, SIMBOLO[st] + " " + conta(st)),
+    el("span", { class: "rotulo" }, rotulo, resto ? el("span", { class: "so-largo" }, resto) : null));
+  document.getElementById("versao").textContent = e.versao ? "v" + e.versao : "";
+  document.getElementById("resumo").replaceChildren(parte("trabalhando", "trabalhando"), parte("esperando", "esperando", " você"),
+    parte("finalizado", "finalizados"));
+}
+// Uso do plano: um cartão por limite, com a barra na cor do nível e a contagem até renovar.
+function desenhaLimites(e) {
+  const lista = e.limites || [];
+  document.getElementById("painel-limites").replaceChildren(...(lista.length ? [
+    el("div", { class: "titulo-painel" }, "Uso do plano"),
+    el("div", { class: "limites-grade" }, lista.map(l => el("div", { class: "cartao-limite nivel-" + nivel(l.pct, 70, 90) },
+      el("div", { class: "topo" }, el("span", { class: "t3" }, l.grupo), el("span", null, l.nome), el("b", { class: "pct" }, l.pct + "%")),
+      el("span", { class: "barra" }, el("i", { style: "width: " + Math.min(100, l.pct) + "%" })),
+      el("span", { class: "t3 renova" }, l.renova ? ["renova em ", relogio("", null, l.renova)] : "sem data de renovação"))))] : []));
+}
+// Atividade recente: os últimos passos de todas as sessões; um clique abre a sessão.
+function desenhaAtividade(e) {
+  const visiveis = new Set(e.sessoes.filter(passaFiltro).map(s => s.id));  // o filtro dos harnesses e modelos vale aqui também
+  const feed = (e.atividade || []).filter(x => visiveis.has(x.sessao));
+  document.getElementById("atividade").replaceChildren(...(feed.length ? [
+    el("div", { class: "titulo-painel" }, "Atividade recente"),
+    el("div", { class: "feed" }, feed.map(x => {
+      const [rotulo, classe] = x.tipo === "ferramenta" ? [x.nome, "tipo-ferramenta"] : TIPO[x.tipo] || ["saída", "t2"];
+      return el("button", { class: "item-feed", title: x.texto, onclick: () => vaiPara(x.sessao) },
+        el("span", { class: "mono t3 hora" }, hora(x.ts)),
+        el("span", { class: "projeto-feed" }, x.projeto + (x.quem ? " · " + x.quem : "")),
+        el("span", { class: "corta rotulo-feed " + classe }, rotulo),
+        el("span", { class: "corta texto-feed" }, x.texto));
+    }))] : []));
+}
+// A aba mostra o que espera e o que trabalha, no título e na cor do ícone: dá para ver com ela em segundo plano.
+function sinalizaAba(sessoes) {
+  const n = st => sessoes.filter(s => s.urgente === st).length, esp = n("esperando"), trab = n("trabalhando");
+  document.title = tituloAba = (esp ? "◆" + esp + " " : "") + (trab ? "●" + trab + " " : "") + "monitor";
+  const token = nome => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();  // as cores do tema
+  const cor = token(esp ? "--esperando" : trab ? "--trabalhando" : sessoes.length ? "--finalizado" : "--linha-forte");
+  const href = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'  // a logo, na cor do estado
+    + '<rect x="1" y="1" width="30" height="30" rx="8" fill="' + token("--elevado") + '" stroke="' + cor + '" stroke-width="2"/>'
+    + '<path d="M6 17h4.5l2.5-6.5 4 12 3-8.5 1.5 3H24" fill="none" stroke="' + cor + '" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '<circle cx="25.5" cy="17" r="2.6" fill="' + cor + '"/></svg>');
+  const link = document.querySelector("link[rel=icon]");
+  if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+}
+// Avisa quando uma sessão termina ou passa a esperar você: notificação do sistema e voz, cada um ligado no painel Voz.
+let avisos = guardado("monitor.avisos", { voz: true, notificacao: false });
+// Espera longa: a sessão que espera você há 5 min repete o aviso a cada 5 min, e a aba em segundo plano pisca.
+const ESPERA_LONGA = 5 * 60000;
+const esperas = {};  // id da sessão -> {desde, avisado}: quando a página a viu passar a esperar, e o último aviso
+let tituloAba = "monitor", piscou = false;
+function lembraEsperas() {
+  if (!ultimo) return;
+  const agora = Date.now(), longas = [];
+  for (const s of ultimo.sessoes) {
+    if (s.urgente !== "esperando") { delete esperas[s.id]; continue; }
+    const e = esperas[s.id] ??= { desde: agora, avisado: agora };
+    if (agora - e.desde < ESPERA_LONGA) continue;
+    longas.push(s);
+    if (agora - e.avisado < ESPERA_LONGA) continue;
+    e.avisado = agora;
+    const frase = s.projeto + " ainda espera você, há " + Math.round((agora - e.desde) / 60000) + " minutos";
+    if (avisos.voz && !leitura) ouvir("aviso", "aviso", frase + ".");
+    if (avisos.notificacao && window.Notification?.permission === "granted") {
+      const n = new Notification(frase, { body: s.fazendo || "", tag: s.id });
+      n.onclick = () => { window.focus(); vaiPara(s.id); n.close(); };
+    }
+  }
+  for (const id of Object.keys(esperas)) if (!ultimo.sessoes.some(s => s.id === id)) delete esperas[id];
+  const titulo = longas.length && document.hidden && (piscou = !piscou) ? "⚠ " + longas[0].projeto + " espera você" : tituloAba;
+  if (document.title !== titulo) document.title = titulo;
+}
+let vistos = null;  // id da sessão -> status da consulta anterior; a primeira consulta só anota, não avisa
+function avisa(sessoes) {
+  const frases = [];
+  for (const s of sessoes) {
+    const antes = vistos && vistos[s.id];
+    if (!vistos || antes === s.urgente || (!antes && s.urgente !== "esperando")) continue;  // sessão nova só avisa se já espera
+    const frase = s.urgente === "esperando" ? s.projeto + (s.pergunta || s.bloqueio ? " tem uma pergunta" : " está esperando você")
+      : s.urgente === "finalizado" ? s.projeto + " terminou" : null;
+    if (!frase) continue;
+    frases.push(frase);
+    if (avisos.notificacao && window.Notification?.permission === "granted") {
+      const n = new Notification(frase, { body: s.fazendo || "", tag: s.id });
+      n.onclick = () => { window.focus(); vaiPara(s.id); n.close(); };
+    }
+  }
+  vistos = Object.fromEntries(sessoes.map(s => [s.id, s.urgente]));
+  if (frases.length && avisos.voz && !leitura) ouvir("aviso", "aviso", frases.join(". ") + ".");  // não corta uma leitura em curso
+}
+function desenhaTrilho(e) {
+  const botao = (chave, classe, filhos) => el("button", { class: classe, id: "filtro:" + chave,
+    "aria-pressed": String(chave === "todos" ? !filtro : filtro === chave), onclick: () => escolhe(chave) }, filhos);
+  const estados = sessoes => ESTADOS.map(st => [st, sessoes.filter(s => s.urgente === st).length]).filter(([, n]) => n)
+    .map(([st, n]) => el("span", { class: "st-" + st }, SIMBOLO[st] + " " + n));
+  const modelos = new Map();  // modelo -> as sessões com algum agente nele: a contagem é de sessões, como no cabeçalho
+  for (const s of e.sessoes) {
+    for (const m of new Set(todosAgentes([s]).map(a => a.modelo || "?"))) modelos.set(m, [...(modelos.get(m) || []), s]);
+  }
+  // Filtro só com escolha: harness sem sessão não aparece, e cada fileira só com duas opções (ou com o filtro dela ligado).
+  const comSessao = e.harnesses.filter(h => e.sessoes.some(s => s.harness === h.id));
+  const verHarness = comSessao.length > 1 || Boolean(filtro?.startsWith("h:")), verModelos = modelos.size > 1 || Boolean(filtro?.startsWith("m:"));
+  const trilho = document.getElementById("trilho");
+  trilho.hidden = !verHarness && !verModelos;
+  trilho.replaceChildren(...[
+    verHarness ? el("div", { class: "fileira" },
+      el("div", { class: "titulo" }, "Harnesses"),
+      botao("todos", "item-trilho", el("div", { class: "l1" }, el("span", { class: "nome" }, "Todos"), el("span", { class: "n" }, e.sessoes.length))),
+      ...comSessao.map(h => {
+        const daqui = e.sessoes.filter(s => s.harness === h.id);
+        return botao("h:" + h.id, "item-trilho", [
+          el("div", { class: "l1" }, el("span", { class: "sigla" }, SIGLA[h.id] || "?"), el("span", { class: "nome" }, h.nome),
+            el("span", { class: "n" }, daqui.length)),
+          el("div", { class: "estados" }, estados(daqui))]);
+      })) : null,
+    verHarness && verModelos ? el("div", { class: "sep" }) : null,
+    verModelos ? el("div", { class: "fileira fileira-modelos" },
+      el("div", { class: "titulo" }, "Modelos", el("span", { class: "so-largo" }, " abertos · sessões")),
+      ...[...modelos].sort((x, y) => y[1].length - x[1].length).map(([m, sessoes]) => botao("m:" + m, "item-modelo", [
+        el("span", { class: "nome", title: m }, el("span", { class: classeModelo(m) }, modeloCurto(m)), el("span", { class: "estados" }, estados(sessoes))),
+        el("span", { style: "text-align: right; font-size: 13px" }, sessoes.length)]))) : null,
+  ].filter(Boolean));
+}
+function passaFiltro(s) {
+  if (!filtro) return true;
+  if (filtro.startsWith("h:")) return s.harness === filtro.slice(2);
+  return todosAgentes([s]).some(a => (a.modelo || "?") === filtro.slice(2));
+}
+function nomeFiltro() { return filtro.startsWith("h:") ? nomeHarness(filtro.slice(2)) : modeloCurto(filtro.slice(2)); }
+function desenhaPrincipal(e) {
+  const visiveis = e.sessoes.filter(passaFiltro);  // já chegam pela urgência: quem espera você, quem trabalha, quem terminou
+  const varios = new Set(visiveis.map(s => s.harness)).size > 1;  // o harness só aparece no card quando há mais de um
+  // Duas grades: em andamento (quem espera você e quem trabalha) no alto; as finalizadas embaixo, em cartões menores.
+  const secao = (titulo, lista, classe) => lista.length ? el("div", null,
+    el("div", { class: "titulo-painel" }, titulo + " · " + lista.length),
+    el("div", { class: "grade-sessoes" + classe }, lista.map(s => blocoSessao(s, varios ? nomeHarness(s.harness) : null)))) : null;
+  document.getElementById("principal").replaceChildren(...[
+    filtro ? el("button", { class: "botao", id: "limpar-filtro", style: "align-self: flex-start", onclick: () => escolhe("todos") },
+      "Só " + nomeFiltro() + " · mostrar todos", icone("tirar", 14)) : null,
+    visiveis.length ? [secao("Em andamento", visiveis.filter(s => s.urgente !== "finalizado"), ""),
+      secao("Finalizadas", visiveis.filter(s => s.urgente === "finalizado"), " finalizadas")]
+      : el("div", { class: "vazio-lista" }, filtro ? "Nenhuma sessão aberta com " + nomeFiltro() + "." : "Nenhuma sessão aberta."),
+  ].flat(Infinity).filter(Boolean));
+}
+function desenha() {
+  if (!ultimo) return;
+  // Redesenhar apaga a seleção: enquanto você seleciona um texto na lista, a tela espera.
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && document.getElementById("principal").contains(sel.anchorNode)) return;
+  const foco = document.activeElement?.id;  // o redesenho recria os botões: o foco volta ao de mesmo id
+  desenhaCabecalho(ultimo);
+  desenhaLimites(ultimo);
+  desenhaAtividade(ultimo);
+  desenhaTrilho(ultimo);
+  desenhaPrincipal(ultimo);
+  const alvo = foco ? document.getElementById(foco) : null;
+  alvo?.focus({ preventScroll: true });
+  aplicaDestaque();  // o redesenho troca os nós: a faixa da palavra lida se refaz nos novos
+  if (alvo?.type === "text") alvo.setSelectionRange(alvo.value.length, alvo.value.length);  // a caixa recriada segue no fim do texto
+}
+
+let assinatura = "";  // o último /api/estado sem o carimbo "gerado": se nada mais mudou, a tela não se refaz
+async function atualiza() {
+  try {
+    const r = await fetch("/api/estado");
+    if (!r.ok) throw new Error(r.status);
+    const texto = await r.text(), novo = JSON.parse(texto);
+    recebidoEm = Date.now();
+    document.getElementById("atualizado").classList.remove("fora");
+    deslocamento = ms(novo.gerado) - recebidoEm;
+    for (const id of abertos) buscaEventos(id);
+    for (const id of telasAbertas) buscaTela(id);
+    const semCarimbo = texto.replace(/"gerado":\s*"[^"]*"/, "");
+    if (semCarimbo === assinatura) return;
+    assinatura = semCarimbo;
+    ultimo = novo;
+    const ids = new Set(ultimo.sessoes.map(s => s.id));
+    const velhas = Object.keys(lidas).filter(id => !ids.has(id));  // sessão que saiu do painel: esquece
+    if (velhas.length) { velhas.forEach(id => delete lidas[id]); guarda("monitor.lidas", lidas); }
+    avisa(ultimo.sessoes);
+    sinalizaAba(ultimo.sessoes);
+    desenha();
+  } catch (_) {
+    document.getElementById("atualizado").textContent = "sem conexão com o servidor";
+    document.getElementById("atualizado").classList.add("fora");
+    recebidoEm = 0;
+  }
+}
+
+if (fala) fala.addEventListener("voiceschanged", preencheVozes);
+preencheVozes();
+carregaVozesLocais();
+document.getElementById("taxa").replaceWith(seletorTaxa({ id: "taxa" }));
+document.getElementById("voz").addEventListener("change", ev => { guarda("monitor.voz", ev.target.value); rotuloVoz(); aquece("Olá."); recomeca(); });
+document.getElementById("testar-voz").addEventListener("click", testaVoz);
+document.getElementById("abrir-voz").prepend(icone("ouvir"));
+// Atalhos (fora de uma caixa de texto): j/k andam entre as sessões, o ouve, / vai para a caixa de escrever e 1 a 9 põem o
+// foco na opção da pergunta, que o Enter confirma. O número não responde sozinho: uma tecla solta não aprova nada.
+document.addEventListener("keydown", ev => {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
+  const cards = [...document.querySelectorAll(".sessao")], atual = document.activeElement?.closest(".sessao");
+  if (ev.key === "j" || ev.key === "k") {
+    const i = cards.indexOf(atual), alvo = cards[Math.max(0, Math.min(cards.length - 1, i + (ev.key === "j" ? 1 : -1)))];
+    alvo?.querySelector('[id^="abrir:"]')?.focus();
+    alvo?.scrollIntoView({ block: "nearest" });
+  } else if (ev.key === "o" && atual) {
+    atual.querySelector(".acoes .icone")?.click();
+  } else if (ev.key === "/" && atual?.querySelector(".caixa")) {
+    ev.preventDefault();
+    atual.querySelector(".caixa").focus();
+  } else if (/^[1-9]$/.test(ev.key) && atual) {
+    atual.querySelectorAll(".opcao")[Number(ev.key) - 1]?.focus();
+  }
+});
+for (const [id, chave] of [["aviso-voz", "voz"], ["aviso-notificacao", "notificacao"]]) {
+  const caixa = document.getElementById(id);
+  caixa.checked = Boolean(avisos[chave]);
+  caixa.addEventListener("change", async () => {
+    if (chave === "notificacao" && caixa.checked && window.Notification && Notification.permission !== "granted")
+      caixa.checked = await Notification.requestPermission() === "granted";  // negada: a caixa volta a desmarcada
+    avisos[chave] = caixa.checked;
+    guarda("monitor.avisos", avisos);
+  });
+}
+document.getElementById("abrir-voz").addEventListener("click", ev => {
+  ev.currentTarget.setAttribute("aria-expanded", String(document.querySelector("header").classList.toggle("voz-aberta")));
+});
+setInterval(() => {
+  document.querySelectorAll("[data-prefixo]").forEach(pinta);
+  lembraEsperas();
+  if (recebidoEm) document.getElementById("atualizado").replaceChildren(el("span", { class: "so-largo" }, "atualizado "), "há " + duracao(Date.now() - recebidoEm));
+}, 1000);
+setInterval(atualiza, 2000);
+atualiza();
+</script>
+</body>
+</html>
