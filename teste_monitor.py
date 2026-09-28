@@ -1023,6 +1023,20 @@ def testes_vozes(porta):
     confere(st == 500 and pede(porta, "/api/saude")[0] == 200, "Kokoro residente que nao sobe: 500, e o servidor segue no ar (%s)" % st)
 
 
+def testes_kokoro_ocioso():
+    """Sem pagina consultando, o Kokoro residente sai pela entrada fechada; com pagina, fica."""
+    sys.path.insert(0, os.path.dirname(SCRIPT))
+    import monitor
+    falso = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE)
+    monitor.KOKORO["processo"] = falso
+    monitor.ULTIMA_CONSULTA["t"] = time.monotonic()
+    monitor.solta_kokoro_ocioso()
+    confere(falso.poll() is None, "Kokoro fica enquanto a pagina consulta")
+    monitor.ULTIMA_CONSULTA["t"] = time.monotonic() - monitor.OCIOSO_KOKORO_S - 1
+    monitor.solta_kokoro_ocioso()
+    confere(falso.poll() == 0 and monitor.KOKORO["processo"] is None, "Kokoro sai sem pagina consultando (%r)" % falso.poll())
+
+
 # ---------------------------------------------------------------- CLI
 
 class Falso(http.server.BaseHTTPRequestHandler):
@@ -1248,6 +1262,7 @@ def main():
     confere(rc == 0 and b"nenhum" in out.lower(), "parar sem servidor sai 0 e avisa (%r)" % out)
     testes_cli()
     testes_rede()
+    testes_kokoro_ocioso()
 
     if FALHAS:
         print("\n".join("FALHA " + f for f in FALHAS))

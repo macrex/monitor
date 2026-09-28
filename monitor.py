@@ -1217,6 +1217,9 @@ def vozes_locais():
 
 KOKORO = {"processo": None}   # o Kokoro residente (voz_kokoro.py): carrega o modelo uma vez
 TRAVA_KOKORO = threading.Lock()  # um pedido por vez no Kokoro, na ordem em que chegam
+# Sem pagina consultando o /api/estado (a aba escondida ainda consulta uma vez por minuto), o Kokoro sai da GPU.
+OCIOSO_KOKORO_S = 150
+ULTIMA_CONSULTA = {"t": time.monotonic()}
 CACHE_FALA = OrderedDict()       # (voz, texto) -> WAV das ultimas falas: repetir ou adiantar sai na hora
 TRAVA_CACHE = threading.Lock()
 
@@ -1242,6 +1245,20 @@ def fala_kokoro(voz, texto):
     if not wav or len(wav) != tamanho:
         raise OSError("o Kokoro nao gerou a fala")
     return wav
+
+
+def solta_kokoro_ocioso():
+    """Monitor fechado ha OCIOSO_KOKORO_S: fecha a entrada do Kokoro, que sai e libera a GPU; o proximo pedido sobe outro."""
+    if time.monotonic() - ULTIMA_CONSULTA["t"] < OCIOSO_KOKORO_S:
+        return
+    with TRAVA_KOKORO:
+        p, KOKORO["processo"] = KOKORO["processo"], None
+        if p and p.poll() is None:
+            p.stdin.close()  # pela entrada, e nao por kill: o python do venv e so um lancador do processo que tem o modelo
+            try:
+                p.wait(10)
+            except subprocess.TimeoutExpired:
+                p.kill()
 
 
 def fala_local(voz_id, texto):
@@ -1347,6 +1364,7 @@ class Pedido(BaseHTTPRequestHandler):
         elif url.path == "/api/saude":
             self.responde(200, {"monitor": True, "versao": VERSAO, "pid": os.getpid(), "rede": self.server.rede})
         elif url.path == "/api/estado":
+            ULTIMA_CONSULTA["t"] = time.monotonic()
             # O token vai junto: a pagina aberta antes de um reinicio pega o novo (so a mesma origem le esta resposta).
             self.responde(200, dict(estado(), token=TOKEN))
         elif url.path == "/api/vozes":
@@ -1448,6 +1466,12 @@ def servir(porta, rede=False):
     srv.rede, srv.chave = rede, chave_rede() if rede else None
     # A primeira varredura le os transcripts grandes do zero (1,6 s); feita ja, a pagina que abre em seguida nao espera.
     threading.Thread(target=estado, daemon=True).start()
+
+    def vigia_kokoro():
+        while True:
+            time.sleep(30)
+            solta_kokoro_ocioso()
+    threading.Thread(target=vigia_kokoro, daemon=True).start()
     try:
         srv.serve_forever()
     finally:
