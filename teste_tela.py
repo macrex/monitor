@@ -124,6 +124,7 @@ def confere_largura(nav, porta, largura):
         modelo: document.querySelector('#s-trab > .modelo').textContent, secoes: [...document.querySelectorAll('#principal .titulo-painel')].map(x => x.textContent),
         limites: Math.round(g.right - c.right), cabecalho: Math.round(document.querySelector('header').getBoundingClientRect().height),
         falhouNoCartao: document.getElementById('s-fim').textContent.includes('falhou'),
+        pedido: (e => e && [e.textContent, Math.round(e.getBoundingClientRect().height)])(document.querySelector('#s-trab > .prompt')),
         favicon: document.querySelector('link[rel=icon][sizes="256x256"]').getAttribute('href') };
     }""")
     colunas = 3 if largura >= 1100 else 2 if largura >= 700 else 1
@@ -133,6 +134,8 @@ def confere_largura(nav, porta, largura):
     confere(m["modelo"] == "Opus 5.5 · high · 1M" and m["secoes"] == ["Em andamento · 4", "Finalizadas · 2"], "%d px: modelo e secoes (%r)" % (largura, (m["modelo"], m["secoes"])))
     confere(m["limites"] <= 1 and m["cabecalho"] <= 64,
             "%d px: uso do plano na largura toda e cabecalho numa linha (%r)" % (largura, (m["limites"], m["cabecalho"])))
+    confere(m["pedido"] and m["pedido"][0].startswith("pedido: “pedido de") and m["pedido"][1] <= 20,
+            "%d px: o cartao fechado mostra o pedido numa linha (%r)" % (largura, m["pedido"]))
     icone = pag.evaluate("""href => new Promise(ok => { const i = new Image(); i.onload = () => ok([i.naturalWidth, i.naturalHeight]);
       i.onerror = () => ok(null); i.src = href; })""", m["favicon"])
     confere(not m["falhouNoCartao"] and m["favicon"].startswith("data:image/png") and icone == [256, 256],

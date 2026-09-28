@@ -986,6 +986,7 @@ function cartao(s, harness) {
       el("span", { class: "espaco" }),
       ativo(s) ? relogio("turno ", s.turno_inicio) : relogio("há ", s.ultimo)),
     el("span", { class: "projeto corta", title: s.titulo || s.projeto }, s.projeto),
+    s.prompt ? el("span", { class: "prompt corta", title: s.prompt }, "pedido: “" + s.prompt + "”") : null,
     fim ? null : modelo,
     fim ? null : contextoGrande(s),
     linhaFazendo(s),
