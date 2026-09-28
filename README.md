@@ -36,9 +36,12 @@ o `pythonw` (sem janela de console); no login o painel sobe e abre a janela pró
 
 Só as sessões abertas, em duas grades de cartões: "Em andamento" no alto e "Finalizadas" embaixo (duas
 colunas no monitor em pé, três na tela larga, uma no celular); com mais de um harness aberto, cada card diz o
-seu. Cada card mostra projeto, modelo (pelo nome falado, `Opus 5.5`, `Haiku 4.5`, `GPT 5.6 Terra`, numa
-etiqueta com a cor da família: opus, sonnet, haiku, fable, gpt, gemini), status, contexto (a porcentagem da janela, verde até 50%,
-laranja até 80% e vermelha acima; os tokens ficam no título), tempo de sessão e de turno, o prompt e
+seu. Cada card mostra projeto, modelo (pelo nome falado e com o esforço do turno, `Opus 5.5 · high`, `GPT 5.6 Terra · medium`, numa
+etiqueta com a cor da família: opus, sonnet, haiku, fable, gpt, gemini), status, contexto (a porcentagem da janela,
+verde até 50%,
+laranja até 80% e vermelha acima; os tokens ficam no título). A janela do Claude sai da porcentagem que a statusline de cada
+sessão publica no clawd-panel (tokens ÷ % dá 200 mil ou 1M, e vale para os agentes do mesmo modelo); sem ela, tokens
+acima de 200 mil já contam como 1M, e o `[1m]` do `settings.json` decide o resto, tempo de sessão e de turno, o prompt e
 o que o agente está fazendo. A sessão que fecha sai do painel. Os status e as cores são os do herdr: trabalhando
 (amarelo), esperando você (vermelho: pergunta, permissão ou turno travado sem sinal há 2 min) e
 finalizado (teal: o turno fechou). O "fazendo" é macro: a última fala do agente no turno ou, sem
@@ -75,10 +78,12 @@ ela, a descrição do passo (`description`, `toolSummary`); o comando fica nos e
   de ferramenta, fala, pedido, erro), com o filtro de harness ou modelo valendo aqui também; um clique abre
   a sessão. De 1700 px para cima,
   o uso do plano e a atividade ficam numa coluna à direita; abaixo disso, acima e abaixo das sessões.
-- **Aba:** o ícone é a logo na cor do estado mais urgente, e o título diz quem espera e quem trabalha, com
+- **Aba:** o ícone é a logo (a tela com o pulso), com o pulso na cor do estado mais urgente, desenhada em 16, 32 e
+  256 px, e o título diz quem espera e quem trabalha, com
   a aba em segundo plano. A sessão que espera você há 5 min faz a aba piscar.
 - **Ouvir e avisos:** o botão de alto-falante lê em voz alta a linha, a conclusão ou a saída. O botão
-  "Voz" do cabeçalho abre a voz, a velocidade (0,8× a 3×, também no player), o "Testar" e os avisos:
+  "Voz" do cabeçalho abre a voz, a velocidade (0,8× a 3×, também no player), o volume (também no player; a voz
+  local muda na hora, a do navegador recomeça o trecho ao soltar o controle), o "Testar" e os avisos:
   por voz e por notificação do sistema quando uma sessão termina ou passa a esperar você. A que continua
   esperando repete o aviso a cada 5 min.
 - **A palavra lida:** enquanto lê, a palavra atual fica marcada no próprio campo (a conclusão, o "fazendo",
@@ -92,7 +97,8 @@ ela, a descrição do passo (`description`, `toolSummary`); o comando fica nos e
 Como no painel ESP32: a sessão que roda num pane do herdr ganha, no card, a pergunta que está na tela com as opções, uma caixa para escrever ao agente (uma
 linha, Enter envia), `/compact`, `/clear` e "Interromper" (Esc), os dois últimos com confirmação. O
 card aberto ainda mostra o terminal (a tela visível, só leitura) e, no Edge e no Chrome, um botão de
-ditado (o áudio vai para o serviço de voz do navegador).
+ditado (o áudio vai para o serviço de voz do navegador): um clique começa, ele segue ouvindo, e o segundo clique
+para e põe o texto na caixa.
 
 Quem age no pane é o clawd-panel (porta 8787, `MONITOR_CLAWD` troca o endereço): o monitor acha o
 pane da sessão pelo `GET /panes` e repassa a ação a `POST /responder` e `POST /enviar`; o terminal
@@ -100,7 +106,8 @@ vem de `GET /ler`. A resposta a uma opção confere, na tela, se a pergunta aind
 apertar Enter. As rotas que digitam só aceitam a página servida pelo próprio servidor: ela traz um
 token que muda a cada execução e o manda no cabeçalho `X-Monitor` (outra origem não lê a página, e o
 cabeçalho força o preflight que o servidor não atende), e a `Origin`, se vier, tem de ser a do
-monitor. O texto é uma linha de até 4000 caracteres. Sessão fora do herdr (Claude Desktop, extensão
+monitor. O token também vem em cada `/api/estado`, então a página aberta antes de um reinício do servidor
+continua agindo. O texto é uma linha de até 4000 caracteres. Sessão fora do herdr (Claude Desktop, extensão
 do VS Code, `codex exec`) fica só leitura.
 
 **Atalhos** (fora de uma caixa de texto): `j`/`k` andam entre as sessões, `o` ouve, `/` vai para a

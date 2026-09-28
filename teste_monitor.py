@@ -482,7 +482,7 @@ def monta_codex():
         cx_msg(399, "user", "# AGENTS.md instructions for /work/beta\n\n<INSTRUCTIONS>regras</INSTRUCTIONS>"),
         cx_msg(399, "user", "<environment_context>cwd</environment_context>"),
         cx_msg(398, "user", "corrige o bug do parser"),
-        cx(397, "turn_context", {"model": "gpt-5.6-terra", "cwd": "/work/beta/sub"}),
+        cx(397, "turn_context", {"model": "gpt-5.6-terra", "cwd": "/work/beta/sub", "effort": "medium"}),
         cx_msg(335, "assistant", "vou corrigir o parser e rodar os testes"),
         cx_call(330, "p1", "update_plan", {"plan": [{"step": "ler o parser", "status": "completed"},
                                                     {"step": "corrigir", "status": "in_progress"},
@@ -904,6 +904,28 @@ def testes_arquivos(porta):
     confere(arq == esperado, "arquivos do turno: so os escritos, do ultimo tocado ao primeiro, sem o turno velho (%r)" % arq)
 
 
+def testes_janela(porta):
+    """A janela de contexto do Claude: a statusline diz a % de cada sessao, e tokens / % da a janela (vale para o
+    modelo inteiro); sem ela, tokens acima de 200 mil ja provam 1M. Nada passa de 100% por janela errada."""
+    uso = lambda n: {"input_tokens": n, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+    for n, (sid, modelo, tokens) in enumerate((("cc-janela-grande", "claude-sonnet-9", 300000),
+                                               ("cc-janela-sl", "claude-haiku-9", 100000),
+                                               ("cc-janela-200", "claude-fable-9", 100000),
+                                               ("cc-janela-irma", "claude-haiku-9", 50000))):
+        cc_sessao(sid, [cc_user(60, "pedido"), cc_assist(50, [{"type": "text", "text": "ok"}], modelo=modelo, usage=uso(tokens))])
+        cc_viva(680 + n, sid, "idle")
+    for n, esforco in ((0, "high"), (1, "xhigh")):  # o do ultimo registro vale
+        grava(".claude/projects/-work-alpha/cc-janela-sl.jsonl", [dict(cc_assist(40 - n, [{"type": "text", "text": "ok"}], modelo="claude-haiku-9",
+              usage=uso(100000)), perTurnEffort=esforco)])
+    s = por_id(pede(porta, "/api/estado")[1])
+    confere(s.get("claude-code:cc-janela-sl", {}).get("esforco") == "xhigh" and s.get("codex:cx-trab", {}).get("esforco") == "medium",
+            "esforco do turno: o do ultimo registro do Claude e o do turn_context do Codex (%r, %r)"
+            % (s.get("claude-code:cc-janela-sl", {}).get("esforco"), s.get("codex:cx-trab", {}).get("esforco")))
+    j = {k: s.get("claude-code:" + k, {}).get("janela") for k in ("cc-janela-grande", "cc-janela-sl", "cc-janela-200", "cc-janela-irma")}
+    confere(j == {"cc-janela-grande": 1000000, "cc-janela-sl": 1000000, "cc-janela-200": 200000, "cc-janela-irma": 1000000},
+            "janela: 300 mil tokens ja e 1M; o percentual da statusline da 1M ou 200 mil, e vale para o mesmo modelo (%r)" % j)
+
+
 def testes_rede():
     """--rede: a maquina entra como sempre; de fora (o IP da rede local, que o servidor ve como outro cliente), so com o
     cookie da chave, que o link com ?chave= grava. Parar, so desta maquina; nome de host continua recusado."""
@@ -1044,6 +1066,8 @@ class ClawdFalso(http.server.BaseHTTPRequestHandler):
                                         "cwd": "/work/alpha", "bloqueio": {"pergunta": "A ou B?", "opcoes": [
                                             {"n": 1, "rotulo": "A", "texto": False}, {"n": 2, "rotulo": "B", "texto": False}]}}]}
     pedidos = []  # (rota, cabecalho X-Monitor, corpo) de cada POST
+    # A % de contexto que a statusline publica por sessao (o /sessions): e dela que sai a janela de verdade.
+    sessions = {"sessions": [{"session_id": "cc-janela-sl", "context_pct": 10}, {"session_id": "cc-janela-200", "context_pct": 50}]}
 
     def responde(self, corpo, st=200):
         corpo = json.dumps(corpo).encode()
@@ -1055,7 +1079,7 @@ class ClawdFalso(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/ler?pane_id=w9%3Ap1":
             return self.responde({"pane": "w9:p1", "texto": "tela do agente\n> _"})
-        corpo = {"/status": self.status, "/panes": self.panes}.get(self.path)
+        corpo = {"/status": self.status, "/panes": self.panes, "/sessions": self.sessions}.get(self.path)
         self.responde(corpo or {}, 200 if corpo else 404)
 
     def do_POST(self):
@@ -1077,6 +1101,8 @@ def testes_acoes(porta):
     achado = re.search(rb'name="monitor-token" content="([^"]+)"', pagina)
     token = achado.group(1).decode() if achado else ""
     confere(len(token) >= 16 and token != "__TOKEN__", "a pagina traz o token desta execucao do servidor")
+    confere(pede(porta, "/api/estado")[1].get("token") == token,
+            "o /api/estado traz o mesmo token: a pagina aberta antes de um reinicio pega o novo sem recarregar")
     oi = corpo({"sessao": "claude-code:cc-pergunta", "texto": "oi"})
     confere(pede(porta, "/api/enviar", "POST", js, oi)[0] == 403, "sem o cabecalho X-Monitor ninguem digita no agente")
     confere(pede(porta, "/api/enviar", "POST", dict(js, **{"X-Monitor": "acao"}), oi)[0] == 403,
@@ -1205,6 +1231,7 @@ def main():
         testes_agy(porta)
         testes_incremental(porta)
         testes_arquivos(porta)
+        testes_janela(porta)
         testes_api(porta)
         testes_vozes(porta)
         testes_limites(porta)

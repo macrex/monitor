@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Monitor</title>
 <meta name="monitor-token" content="__TOKEN__">
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/png" sizes="16x16" href="data:,">
+<link rel="icon" type="image/png" sizes="32x32" href="data:,">
+<link rel="icon" type="image/png" sizes="256x256" href="data:,">
 <style>
 :root {
   /* tokyo-night, o tema do herdr; a cor fica só para o estado */
@@ -48,9 +50,11 @@ header.voz-aberta #controles-voz { order: 9; flex-basis: 100%; display: flex; fl
 /* A marca: o traço de pulso (o monitor) terminando no ponto de quem já entregou; o nome e a versão ao lado. */
 .marca { display: flex; align-items: center; gap: 10px; }
 .logo { flex-shrink: 0; }
-.logo rect { fill: var(--elevado); stroke: var(--linha-forte); }
-.logo path { fill: none; stroke: var(--trabalhando); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.logo circle { fill: var(--finalizado); }
+.logo .fundo { fill: var(--painel); stroke: var(--linha-forte); stroke-width: 4; }
+.logo .tela { fill: var(--fundo); stroke: var(--texto); stroke-width: 12; }
+.logo .pulso { fill: none; stroke: var(--trabalhando); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+.logo .pe { fill: none; stroke: var(--texto); stroke-width: 12; stroke-linecap: round; }
+.icone[aria-pressed="true"] { color: var(--esperando); border-color: var(--esperando); }  /* o ditado ouvindo */
 .nome-marca { display: flex; flex-direction: column; line-height: 1.15; }
 .nome-marca b { font-size: 15px; letter-spacing: .02em; }
 .nome-marca .sub { font-size: 11px; color: var(--texto-3); }
@@ -68,6 +72,7 @@ header.voz-aberta #controles-voz { order: 9; flex-basis: 100%; display: flex; fl
 #atualizado.fora { color: var(--esperando); }
 #atualizado.fora::before { background: var(--esperando); }
 .voz { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--texto-2); }
+.volume { width: 110px; accent-color: var(--finalizado); cursor: pointer; }
 .voz select { height: 32px; max-width: 220px; padding: 0 8px; border: 1px solid var(--linha); border-radius: 6px; background: var(--elevado); color: var(--texto); }
 
 /* O miolo: filtros à esquerda; no centro o uso do plano, as sessões e a atividade recente. De 1700 px para cima, o uso
@@ -140,7 +145,8 @@ main { grid-area: principal; min-width: 0; display: flex; flex-direction: column
 /* Responder e escrever para o agente, dentro do card: a pergunta da tela com as opções, e a caixa de texto. */
 .sessao.espera { border-color: var(--esperando); background: color-mix(in srgb, var(--esperando) 5%, var(--painel)); }
 .resposta { grid-area: resposta; display: flex; flex-direction: column; gap: 8px; padding: 0 16px 12px; }
-.resposta .pergunta { color: var(--esperando); font-weight: 600; overflow-wrap: anywhere; }
+.resposta .pergunta { color: var(--esperando); font-weight: 600; overflow-wrap: anywhere; white-space: pre-line;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }  /* sem formulário, o clawd manda o fim da tela: 4 linhas, o resto no título */
 .opcoes { display: flex; flex-wrap: wrap; gap: 8px; }
 .botao.opcao { height: auto; min-height: 32px; padding: 6px 12px; white-space: normal; text-align: left; border-color: var(--alerta-linha); background: var(--alerta-botao); }
 .comando { grid-area: comando; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; }
@@ -308,6 +314,7 @@ main { grid-area: principal; min-width: 0; display: flex; flex-direction: column
   header { gap: 8px 12px; }
   #resumo .rotulo, #rotulo-botao-voz { display: none; }
   #abrir-voz { width: 44px; padding: 0; justify-content: center; }
+  #volume-player { display: none; }  /* no celular, o volume é o dos botões do aparelho; fica o do painel Voz */
   .icone { width: 44px; height: 44px; }
   .botao, .voz select, .item-trilho, .item-modelo, .caixa { height: 44px; }
   .botao.opcao, .recolhe-subs { min-height: 44px; }
@@ -319,10 +326,11 @@ main { grid-area: principal; min-width: 0; display: flex; flex-direction: column
 <body>
 <header>
   <div class="marca">
-    <svg class="logo" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="1" y="1" width="30" height="30" rx="8"/>
-      <path d="M6 17h4.5l2.5-6.5 4 12 3-8.5 1.5 3H24"/>
-      <circle cx="25.5" cy="17" r="2.2"/>
+    <svg class="logo" width="32" height="32" viewBox="0 0 256 256" aria-hidden="true">
+      <rect class="fundo" x="8" y="8" width="240" height="240" rx="56"/>
+      <rect class="tela" x="44" y="56" width="168" height="120" rx="18"/>
+      <path class="pulso" d="M64 118h26l12-28 18 50 14-36 8 14h30"/>
+      <path class="pe" d="M128 182v22M92 206h72"/>
     </svg>
     <span class="nome-marca"><b>Monitor</b><span class="sub">agentes de IA</span></span>
     <span class="versao" id="versao"></span>
@@ -333,6 +341,7 @@ main { grid-area: principal; min-width: 0; display: flex; flex-direction: column
     <label class="voz" id="rotulo-voz">Voz <select id="voz"></select></label>
     <button class="botao" id="testar-voz" type="button">Testar</button>
     <label class="voz" id="rotulo-taxa">Velocidade <select id="taxa"></select></label>
+    <label class="voz" id="rotulo-volume">Volume <input id="volume"></label>
     <label class="voz"><input type="checkbox" id="aviso-voz"> Avisar por voz</label>
     <label class="voz"><input type="checkbox" id="aviso-notificacao"> Avisar por notificação</label>
   </div>
@@ -447,6 +456,7 @@ function copia(texto) { navigator.clipboard?.writeText(texto).catch(() => { /* s
 const fala = "speechSynthesis" in window ? window.speechSynthesis : null;
 const TAXAS = [0.8, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 let taxa = Number(guardado("monitor.taxa", 1)) || 1;
+let volume = (v => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1)(Number(guardado("monitor.volume", 1)));  // 0 a 1, nas duas vozes
 let vozesLocais = [];  // /api/vozes: [{id: "<motor>:<voz>", nome, motor}]
 let leitura = null;    // { dono, rotulo, partes: [{texto, p}], i, pausado, audio, gerando, fila: i -> promessa do Audio }
 const podeFalar = () => Boolean(fala || vozesLocais.length);
@@ -462,6 +472,25 @@ function mudaTaxa(valor) {
   if (!leitura) return;
   if (!escolha().startsWith("web:")) { if (leitura.audio) leitura.audio.playbackRate = taxa; }  // voz local: na hora
   else recomeca();  // a do navegador recomeça o trecho no ritmo novo
+}
+// O volume da fala: no painel Voz e no player. A voz local muda na hora; a do navegador só lê o volume ao começar o
+// trecho, e recomeça o trecho quando você solta o controle (arrastar não fica recomeçando).
+function controleVolume(attrs) {
+  return el("input", Object.assign({ type: "range", min: "0", max: "100", step: "5", value: String(Math.round(volume * 100)),
+    class: "volume", "aria-label": "Volume da leitura", title: "Volume: " + Math.round(volume * 100) + "%",
+    oninput: ev => mudaVolume(Number(ev.target.value) / 100),
+    onchange: () => { if (leitura && leitura.web) recomeca(); } }, attrs));
+}
+function mudaVolume(valor) {
+  volume = valor;
+  guarda("monitor.volume", volume);
+  for (const id of ["volume", "volume-player"]) {
+    const e = document.getElementById(id);
+    if (!e) continue;
+    e.value = String(Math.round(volume * 100));
+    e.title = "Volume: " + Math.round(volume * 100) + "%";
+  }
+  if (leitura?.audio) leitura.audio.volume = volume;
 }
 // A parte atual de novo, com a voz e a velocidade escolhidas agora.
 function recomeca() {
@@ -545,6 +574,7 @@ function falaParte() {
     if (voz) u.voice = voz;
     u.lang = voz ? voz.lang : "pt-BR";
     u.rate = taxa;
+    u.volume = volume;
     u.onend = u.onerror = proxima;  // cancel() também dispara: o dono mudou e nada avança
     u.onstart = () => { atual.desde = performance.now(); };
     u.onboundary = ev => {  // a voz diz o caractere em que está: é a palavra exata
@@ -586,6 +616,7 @@ async function tocaLocal(atual, voz, proxima) {
   if (leitura !== atual) return;  // descartado; revogar agora cortaria a carga que o Audio ainda faz
   atual.audio = audio;
   audio.playbackRate = taxa;
+  audio.volume = volume;
   audio.onended = audio.onerror = () => { URL.revokeObjectURL(audio.src); proxima(); };
   atual.gerando = false;
   if (!atual.pausado) audio.play().catch(() => { /* o navegador recusou tocar: o botão de pausa retoma */ });
@@ -650,6 +681,7 @@ function desenhaPlayer() {
       el("div", { class: "corta", id: "player-trecho", "aria-hidden": "true" }),
       el("span", { class: "barra" }, el("i", { style: "width: " + Math.round((leitura.i + 1) / n * 100) + "%" }))),
     seletorTaxa({ id: "taxa-player" }),
+    controleVolume({ id: "volume-player" }),
     el("span", { class: "t2" }, nomeVoz()));
   pintaTrecho();
 }
@@ -772,20 +804,50 @@ async function buscaTela(id) {
 }
 // Ditado: o reconhecimento de voz do navegador escreve na caixa; no Edge e no Chrome o áudio vai para a nuvem.
 const Reconhece = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Um clique começa, outro para: enquanto ouve, o texto vai se juntando (o parcial aparece ao lado); ao parar, entra na
+// caixa. O Chrome encerra o reconhecimento sozinho depois de um silêncio: enquanto você não para, ele recomeça.
+let ditado = null;  // {id, r, texto, parcial, parar}
 function dita(s) {
-  const r = new Reconhece();
-  r.lang = "pt-BR";
-  r.onresult = ev => {
-    rascunhos[s.id] = ((rascunhos[s.id] || "") + " " + ev.results[0][0].transcript).trim();
-    delete retorno[s.id];
+  if (ditado) {
+    const outro = ditado.id !== s.id;
+    ditado.parar = true;
+    ditado.r.stop();
+    if (!outro) return;
+  }
+  const d = ditado = { id: s.id, r: new Reconhece(), texto: "", parcial: "", parar: false };
+  d.r.lang = "pt-BR";
+  d.r.continuous = true;
+  d.r.interimResults = true;
+  d.r.onresult = ev => {
+    d.parcial = "";
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      if (ev.results[i].isFinal) d.texto = (d.texto + " " + ev.results[i][0].transcript).trim();
+      else d.parcial += ev.results[i][0].transcript;
+    }
+    retorno[s.id] = "ouvindo: " + (d.texto + " " + d.parcial).trim();
     desenha();
-    document.getElementById("texto:" + s.id)?.focus();
   };
-  r.onerror = ev => { retorno[s.id] = "ditado: " + ev.error; desenha(); };
-  r.onend = () => { if (retorno[s.id] === "ouvindo…") { delete retorno[s.id]; desenha(); } };
-  retorno[s.id] = "ouvindo…";
+  d.r.onerror = ev => {
+    if (ev.error === "no-speech" || ev.error === "aborted") return;  // silêncio: o onend recomeça
+    d.parar = true;
+    retorno[s.id] = "ditado: " + ev.error;
+  };
+  d.r.onend = () => {
+    if (!d.parar) {
+      try { d.r.start(); return; } catch (_) { d.parar = true; }
+    }
+    if (ditado === d) ditado = null;
+    const texto = (d.texto + " " + d.parcial).trim();
+    if (texto) rascunhos[s.id] = ((rascunhos[s.id] || "") + " " + texto).trim();
+    if (retorno[s.id]?.startsWith("ouvindo")) delete retorno[s.id];
+    desenha();
+    const caixa = document.getElementById("texto:" + s.id);
+    caixa?.focus();
+    caixa?.setSelectionRange(caixa.value.length, caixa.value.length);
+  };
+  retorno[s.id] = "ouvindo… clique no microfone para parar";
   desenha();
-  r.start();
+  d.r.start();
 }
 function escolhe(chave) {
   filtro = chave === "todos" || filtro === chave ? null : chave;
@@ -797,7 +859,9 @@ function vaiPara(id) {  // abre a sessão e rola até ela: é o clique na notifi
   desenha();
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
-const TOKEN = document.querySelector('meta[name="monitor-token"]').content;  // o servidor põe o desta execução na página
+// O token desta execução do servidor: vem na página e, a cada consulta, no /api/estado. O servidor reiniciado troca o
+// token, e a página aberta antes dele passa a usar o novo, sem precisar recarregar.
+let TOKEN = document.querySelector('meta[name="monitor-token"]').content;
 // Escrever, responder e interromper: o servidor repassa ao clawd-panel, que age no pane do herdr da sessão.
 const rascunhos = {};  // id da sessão -> texto sendo escrito: o redesenho recria a caixa, e o texto fica
 const retorno = {};    // id da sessão -> como foi a última ação ("enviado ✓", o erro)
@@ -856,6 +920,10 @@ function contextoGrande(a) {
     el("span", { class: "barra" }, el("i", { style: "width: " + pct + "%" })));
 }
 // A etiqueta do modelo leva a cor da família: opus, sonnet, haiku, fable, gpt, gemini.
+// A etiqueta do modelo: o nome falado, o esforço do turno e a janela ("Opus 5.5 · high · 1M").
+function rotuloModelo(a, janela) {
+  return modeloCurto(a.modelo) + (a.esforco ? " · " + a.esforco : "") + (janela && a.janela ? " · " + janelaCurta(a.janela) : "");
+}
 function classeModelo(m) {
   const familia = ["opus", "sonnet", "haiku", "fable", "gpt", "gemini"].find(f => (m || "").toLowerCase().includes(f));
   return "modelo mono corta" + (familia ? " m-" + familia : "");
@@ -875,7 +943,7 @@ function linhaFazendo(a) {
 function blocoResposta(s) {
   const b = s.bloqueio;
   return el("div", { class: "resposta", onclick: ev => ev.stopPropagation() },
-    el("span", { class: "pergunta" }, "◆ " + (b.pergunta || "O agente espera uma resposta na tela.")),
+    el("span", { class: "pergunta", title: b.pergunta || null }, "◆ " + (b.pergunta || "O agente espera uma resposta na tela.")),
     b.opcoes.length ? el("div", { class: "opcoes", role: "group", "aria-label": "Opções da pergunta" },
       b.opcoes.map(o => el("button", { class: "botao opcao", id: "opcao:" + s.id + ":" + o.n,
         onclick: () => age("/api/responder", { sessao: s.id, n: o.n, rotulo: o.rotulo }) }, o.n + ". " + o.rotulo))) : null);
@@ -891,8 +959,10 @@ function blocoComando(s) {
     el("input", { class: "caixa", id: "texto:" + s.id, type: "text", value: rascunhos[s.id] || "", maxLength: 4000,
       placeholder: "Escrever para " + s.projeto + "…", "aria-label": "Mensagem para " + s.projeto,
       oninput: ev => { rascunhos[s.id] = ev.target.value; }, onkeydown: ev => { if (ev.key === "Enter") envia(); } }),
-    Reconhece ? el("button", { class: "icone", "aria-label": "Ditar a mensagem", title: "Ditado: o áudio vai para o serviço de voz do navegador",
-      onclick: () => dita(s) }, icone("microfone")) : null,
+    Reconhece ? el("button", { class: "icone", id: "ditar:" + s.id, "aria-pressed": String(ditado?.id === s.id),
+      "aria-label": ditado?.id === s.id ? "Parar o ditado" : "Ditar a mensagem",
+      title: "Ditado: um clique começa, outro para (o áudio vai para o serviço de voz do navegador)",
+      onclick: () => dita(s) }, icone(ditado?.id === s.id ? "parar" : "microfone")) : null,
     el("button", { class: "botao primario", id: "enviar:" + s.id, onclick: envia }, "Enviar"),
     claude ? el("button", { class: "botao", onclick: () => age("/api/enviar", { sessao: s.id, texto: "/compact" }) }, "/compact") : null,
     claude ? el("button", { class: "botao", onclick: () => confirm("Apagar o contexto de " + s.projeto + " com /clear?")
@@ -908,7 +978,7 @@ function cartao(s, harness) {
   const alterna = () => alternaAgente(s.id), fim = s.urgente === "finalizado";
   const filhos = todosAgentes([s]).slice(1), vivos = filhos.filter(ativo), prontos = filhos.length - vivos.length;
   const modelo = el("span", { class: classeModelo(s.modelo), style: "font-size: 12px", title: s.modelo || "" },
-    modeloCurto(s.modelo) + (s.janela && !fim ? " · " + janelaCurta(s.janela) : ""));
+    rotuloModelo(s, !fim));
   return el("section", { class: "sessao cartao" + (fim ? " fim" : ""), id: s.id, "aria-label": s.projeto, onclick: alterna },
     el("div", { class: "topo-cartao" },
       s.status === "trabalhando" ? el("span", { class: "forte st-trabalhando", style: "font-size: 13px" }, girando(), "trabalhando") : estado(s),
@@ -948,7 +1018,7 @@ function blocoSessao(s, harness) {
       el("span", { class: "corta" }, el("span", { class: "projeto" }, s.projeto),
         s.titulo && s.titulo !== s.projeto ? el("span", { class: "titulo" }, s.titulo) : null),
       el("span", { class: classeModelo(s.modelo), style: "font-size: 13px", title: s.modelo || "" },
-        modeloCurto(s.modelo) + (s.janela ? " · " + janelaCurta(s.janela) : "")),
+        rotuloModelo(s, true)),
       el("span", { class: "metricas" },
         el("span", null, el("span", { class: "rotulinho" }, "contexto"), contexto(s)),
         el("span", null, el("span", { class: "rotulinho" }, "sessão"), relogio("", s.inicio)),
@@ -988,7 +1058,7 @@ function linhaAgente(a) {
         el("button", { class: "forte corta", id: a.id, "aria-expanded": String(aberto), title: nome,
           onclick: ev => { ev.stopPropagation(); alternaAgente(a.id); } }, (aberto ? "▾ " : "▸ ") + nome),
         a.funcao ? el("span", { class: "funcao corta", title: a.funcao }, a.funcao) : null),
-      el("span", { class: classeModelo(a.modelo), title: a.modelo || "" }, modeloCurto(a.modelo)),
+      el("span", { class: classeModelo(a.modelo), title: a.modelo || "" }, rotuloModelo(a, false)),
       contexto(a),
       relogio("", a.inicio, a.status === "finalizado" ? a.ultimo : null),
       el("span", { class: "corta" + (a.status === "finalizado" ? " t2" : ""), title: a.fazendo || "" }, a.fazendo || (a.status === "trabalhando" ? processando() : "—"))),
@@ -1142,17 +1212,40 @@ function desenhaAtividade(e) {
     }))] : []));
 }
 // A aba mostra o que espera e o que trabalha, no título e na cor do ícone: dá para ver com ela em segundo plano.
+// O ícone da aba e da barra de tarefas: a logo (a tela com o pulso), com o pulso na cor do estado. Desenhado em cada
+// tamanho (16, 32 e 256), não reduzido de um grande. A janela própria (Edge --app) entrega à barra no máximo o de 32.
+const icones = {};  // "cor|tamanho" -> PNG
+function iconeLogo(cor, t, tamanho) {  // t: as cores do tema (fundo, painel, linha, texto)
+  const chave = cor + "|" + tamanho;
+  if (icones[chave]) return icones[chave];
+  const c = document.createElement("canvas");
+  c.width = c.height = tamanho;
+  const g = c.getContext("2d");
+  g.scale(tamanho / 256, tamanho / 256);  // o desenho em 256 unidades, o mesmo SVG do cabeçalho
+  g.lineCap = g.lineJoin = "round";
+  const traco = (d, cor2, largura, preenche) => {
+    const p = new Path2D(d);
+    if (preenche) { g.fillStyle = preenche; g.fill(p); }
+    g.strokeStyle = cor2;
+    g.lineWidth = largura;
+    g.stroke(p);
+  };
+  traco("M64 8h128a56 56 0 0 1 56 56v128a56 56 0 0 1-56 56H64a56 56 0 0 1-56-56V64A56 56 0 0 1 64 8z", t.linha, 4, t.painel);
+  traco("M62 56h132a18 18 0 0 1 18 18v84a18 18 0 0 1-18 18H62a18 18 0 0 1-18-18V74a18 18 0 0 1 18-18z", t.texto, 12, t.fundo);
+  traco("M64 118h26l12-28 18 50 14-36 8 14h30", cor, 12);
+  traco("M128 182v22M92 206h72", t.texto, 12);
+  return icones[chave] = c.toDataURL("image/png");
+}
 function sinalizaAba(sessoes) {
   const n = st => sessoes.filter(s => s.urgente === st).length, esp = n("esperando"), trab = n("trabalhando");
   document.title = tituloAba = (esp ? "◆" + esp + " " : "") + (trab ? "●" + trab + " " : "") + "monitor";
   const token = nome => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();  // as cores do tema
   const cor = token(esp ? "--esperando" : trab ? "--trabalhando" : sessoes.length ? "--finalizado" : "--linha-forte");
-  const href = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'  // a logo, na cor do estado
-    + '<rect x="1" y="1" width="30" height="30" rx="8" fill="' + token("--elevado") + '" stroke="' + cor + '" stroke-width="2"/>'
-    + '<path d="M6 17h4.5l2.5-6.5 4 12 3-8.5 1.5 3H24" fill="none" stroke="' + cor + '" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'
-    + '<circle cx="25.5" cy="17" r="2.6" fill="' + cor + '"/></svg>');
-  const link = document.querySelector("link[rel=icon]");
-  if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+  for (const link of document.querySelectorAll("link[rel=icon]")) {
+    const href = iconeLogo(cor, { fundo: token("--fundo"), painel: token("--painel"), linha: token("--linha-forte"), texto: token("--texto") },
+      parseInt(link.sizes.value, 10));
+    if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+  }
 }
 // Avisa quando uma sessão termina ou passa a esperar você: notificação do sistema e voz, cada um ligado no painel Voz.
 let avisos = guardado("monitor.avisos", { voz: true, notificacao: false });
@@ -1277,6 +1370,7 @@ async function atualiza() {
     if (!r.ok) throw new Error(r.status);
     const texto = await r.text(), novo = JSON.parse(texto);
     recebidoEm = Date.now();
+    if (novo.token) TOKEN = novo.token;
     document.getElementById("atualizado").classList.remove("fora");
     deslocamento = ms(novo.gerado) - recebidoEm;
     for (const id of abertos) buscaEventos(id);
@@ -1302,6 +1396,7 @@ if (fala) fala.addEventListener("voiceschanged", preencheVozes);
 preencheVozes();
 carregaVozesLocais();
 document.getElementById("taxa").replaceWith(seletorTaxa({ id: "taxa" }));
+document.getElementById("volume").replaceWith(controleVolume({ id: "volume" }));
 document.getElementById("voz").addEventListener("change", ev => { guarda("monitor.voz", ev.target.value); rotuloVoz(); aquece("Olá."); recomeca(); });
 document.getElementById("testar-voz").addEventListener("click", testaVoz);
 document.getElementById("abrir-voz").prepend(icone("ouvir"));

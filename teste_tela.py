@@ -64,7 +64,7 @@ ESTADO = {
     "sessoes": [
         sessao("s-esp", "datalake", "esperando", pane="w1:p1", pergunta=True,
                bloqueio={"pergunta": "Posso rodar os testes de integração?", "opcoes": [{"n": 1, "rotulo": "Sim"}, {"n": 2, "rotulo": "Não"}]}),
-        sessao("s-trab", "monitor", "trabalhando", tokens=710000, subagentes=[sub("a1", "opus-Explore", "trabalhando"), sub("a2", "haiku-docs", "finalizado")]),
+        sessao("s-trab", "monitor", "trabalhando", tokens=710000, esforco="high", subagentes=[sub("a1", "opus-Explore", "trabalhando"), sub("a2", "haiku-docs", "finalizado")]),
         sessao("s-cx", "beta", "trabalhando", harness="codex", modelo="gpt-5.6-terra", tokens=60000, janela=258000),
         sessao("s-t3", "gama", "trabalhando"),
         sessao("s-fim", "radar", "finalizado", fazendo="Relatório gerado.", falha={"ts": iso(60), "texto": "exit 1"}),
@@ -124,16 +124,24 @@ def confere_largura(nav, porta, largura):
         modelo: document.querySelector('#s-trab > .modelo').textContent, secoes: [...document.querySelectorAll('#principal .titulo-painel')].map(x => x.textContent),
         limites: Math.round(g.right - c.right), cabecalho: Math.round(document.querySelector('header').getBoundingClientRect().height),
         falhouNoCartao: document.getElementById('s-fim').textContent.includes('falhou'),
-        favicon: document.querySelector('link[rel=icon]').getAttribute('href') };
+        favicon: document.querySelector('link[rel=icon][sizes="256x256"]').getAttribute('href') };
     }""")
     colunas = 3 if largura >= 1100 else 2 if largura >= 700 else 1
     confere(m["lateral"] <= 0, "%d px: sem rolagem lateral" % largura)
     confere(m["porLinha"] == colunas and m["espera"], "%d px: %d cartoes por linha e a espera na largura toda (%r)" % (largura, colunas, m["porLinha"]))
     confere(m["altFim"] < m["altAtivo"], "%d px: finalizada menor que a ativa (%r < %r)" % (largura, m["altFim"], m["altAtivo"]))
-    confere(m["modelo"] == "Opus 5.5 · 1M" and m["secoes"] == ["Em andamento · 4", "Finalizadas · 2"], "%d px: modelo e secoes (%r)" % (largura, (m["modelo"], m["secoes"])))
+    confere(m["modelo"] == "Opus 5.5 · high · 1M" and m["secoes"] == ["Em andamento · 4", "Finalizadas · 2"], "%d px: modelo e secoes (%r)" % (largura, (m["modelo"], m["secoes"])))
     confere(m["limites"] <= 1 and m["cabecalho"] <= 64,
             "%d px: uso do plano na largura toda e cabecalho numa linha (%r)" % (largura, (m["limites"], m["cabecalho"])))
-    confere(not m["falhouNoCartao"] and "%3Cpath" in m["favicon"], "%d px: falha fora do cartao e favicon com a logo" % largura)
+    icone = pag.evaluate("""href => new Promise(ok => { const i = new Image(); i.onload = () => ok([i.naturalWidth, i.naturalHeight]);
+      i.onerror = () => ok(null); i.src = href; })""", m["favicon"])
+    confere(not m["falhouNoCartao"] and m["favicon"].startswith("data:image/png") and icone == [256, 256],
+            "%d px: falha fora do cartao e favicon da logo em PNG de 256 px (%r)" % (largura, icone))
+    pag.click("#abrir-voz")
+    pag.eval_on_selector("#volume", "e => { e.value = '40'; e.dispatchEvent(new Event('input')); }")
+    vol = pag.evaluate("[volume, localStorage.getItem('monitor.volume'), document.getElementById('volume').title]")
+    confere(vol == [0.4, "0.4", "Volume: 40%"], "%d px: o controle de volume muda e guarda o volume (%r)" % (largura, vol))
+    pag.click("#abrir-voz")
 
     pag.click("#abrir\\:s-fim")
     pag.wait_for_selector("#falhas\\:s-fim")

@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-VERSAO = "1.0"
+VERSAO = "1.2"
 PORTA = 8765
 PARADA_S = 120          # turno aberto sem evento ha mais que isso, e sem ferramenta rodando: travou, esperando voce
 ENCERRADA_S = 30 * 60   # harness sem sinal de vida: turno fechado ha mais que isso = sessao encerrada
@@ -185,6 +185,7 @@ class Agente:
         self.descricao = None  # a descricao humana da ultima chamada (description, toolSummary), nunca o comando
         self.pergunta = None   # id da pergunta ao usuario ainda sem resposta
         self.falha = None      # ultima falha de ferramenta: {'texto', 'ts'}
+        self.esforco = None    # o esforco de raciocinio do ultimo turno (low, medium, high, xhigh, max)
         self.terminado = False
         self.encerra_s = ENCERRADA_S  # sem sinal de vida: turno fechado ha mais que isso = sessao encerrada
         self.eventos = deque(maxlen=MAX_EVENTOS)
@@ -293,14 +294,24 @@ def fazendo(a, st):
 
 
 CONFIG_CLAUDE = {}  # mtime do ~/.claude/settings.json -> familia do modelo pedido com [1m] ("opus"), ou ""
+JANELAS = (200000, 1000000)  # as janelas de contexto do Claude
+# Modelo do Claude -> a janela que a statusline mostrou para ele: o Claude Code diz a % de contexto de cada sessao, e
+# tokens / % da a janela de verdade (o Opus 5.5 ja vem com 1M, sem o [1m] no nome nem no settings.json). Vale para os
+# subagentes do mesmo modelo e para quando o clawd-panel sai do ar, enquanto o servidor estiver de pe.
+JANELA_MODELO = {}
 
 
-def janela_claude(modelo):
-    """Janela de contexto de um modelo Claude: 1M quando o model do settings.json pede [1m] na mesma familia, senao
-    200 mil; None para os outros harnesses. ponytail: o transcript do Claude nao grava a janela, e um /model
-    sonnet[1m] dado dentro da sessao sai com 200 mil. Ler do transcript se o Claude Code passar a grava-la."""
+def janela_claude(modelo, tokens=None):
+    """Janela de contexto de um modelo Claude; None para os outros harnesses. Na ordem: a que a statusline mostrou
+    para o modelo (JANELA_MODELO); 1M quando os tokens ja passam de 200 mil, que nao caberiam; 1M quando o model do
+    settings.json pede [1m] na mesma familia; senao 200 mil. ponytail: o transcript nao grava a janela; ler dele se o
+    Claude Code passar a grava-la."""
     if not modelo or not modelo.startswith("claude-"):
         return None
+    if modelo in JANELA_MODELO:
+        return JANELA_MODELO[modelo]
+    if tokens and tokens > JANELAS[0]:
+        return JANELAS[1]
     f = HOME / ".claude" / "settings.json"
     try:
         mtime = f.stat().st_mtime
@@ -325,8 +336,8 @@ def resumo(a, id_, agora, vivo=None, filho=False, nome=None, funcao=None, pergun
     return {"id": id_, "nome": nome, "funcao": funcao, "modelo": a.modelo, "status": st,
             "inicio": iso(a.inicio), "ultimo": iso(a.ultimo), "turno_inicio": iso(a.turno_inicio or a.inicio),
             "prompt": a.prompt, "agora": ferramenta_atual, "fazendo": fazendo(a, st),
-            "pergunta": bool(a.pergunta or pergunta), "tokens": a.tokens, "janela": a.janela or janela_claude(a.modelo),
-            "plano": plano, "falha": falha and {"texto": falha["texto"], "ts": iso(falha["ts"])}}
+            "pergunta": bool(a.pergunta or pergunta), "tokens": a.tokens, "janela": a.janela or janela_claude(a.modelo, a.tokens),
+            "plano": plano, "falha": falha and {"texto": falha["texto"], "ts": iso(falha["ts"])}, "esforco": a.esforco}
 
 
 def sessao(a, harness, id_, agora, vivo=None, titulo=None, pergunta=False):
@@ -440,6 +451,9 @@ def claude_registro(a, r, extra):
         extra["entrypoint"] = r["entrypoint"]
     if r.get("cwd") and not a.cwd:
         a.cwd = r["cwd"]  # o cwd de abertura; um cd depois nao muda o projeto
+    esforco = r.get("perTurnEffort") or r.get("effort")  # cada registro grava o do turno em que esta
+    if isinstance(esforco, str) and esforco:
+        a.esforco = esforco
     if tipo == "custom-title":
         extra["custom"] = r.get("customTitle")
     elif tipo == "ai-title":
@@ -695,6 +709,7 @@ def codex_registro(a, r):
         a.cwd = a.cwd or p.get("cwd")
     elif tipo == "turn_context":
         a.modelo = p.get("model") or a.modelo
+        a.esforco = p.get("effort") or a.esforco
         a.cwd = a.cwd or p.get("cwd")
     elif tipo == "event_msg":
         if tipo_payload == "task_started":
@@ -1025,6 +1040,23 @@ def limites(agora):
     return lista
 
 
+def aprende_janelas(sessoes, agora):
+    """A janela de verdade de cada modelo do Claude, pela % de contexto que a statusline de cada sessao publica no
+    clawd-panel: tokens / % da a janela, arredondada para a mais proxima de JANELAS. Corrige na hora a sessao e os
+    agentes do mesmo modelo nesta consulta, e fica em JANELA_MODELO para as proximas."""
+    publicadas = {c.get("session_id"): c.get("context_pct") for c in clawd_lido("/sessions", 10, agora)[1].get("sessions") or []
+                  if isinstance(c, dict)}
+    for s in sessoes:
+        pct = publicadas.get(id_cli(s["id"]))
+        if (s["harness"] == "claude-code" and isinstance(pct, (int, float)) and not isinstance(pct, bool) and pct >= 1
+                and s.get("tokens") and s.get("modelo")):
+            JANELA_MODELO[s["modelo"]] = min(JANELAS, key=lambda j: abs(j - s["tokens"] * 100 / pct))
+    for s in sessoes:
+        for d in [s] + s["subagentes"] + [a for w in s["workflows"] for a in w["agentes"]]:
+            if d.get("modelo") in JANELA_MODELO:
+                d["janela"] = JANELA_MODELO[d["modelo"]]
+
+
 def id_cli(sessao):
     """O id da sessao como a CLI (e o herdr) o conhece, sem o prefixo do harness: 'claude-code:abc' -> 'abc'."""
     return sessao.split(":", 1)[-1]
@@ -1144,6 +1176,7 @@ def estado():
         feed = atividade(sessoes)
     # Fora da trava: a espera pelo clawd-panel nao segura o /api/eventos. As sessoes sao dicionarios novos desta consulta.
     ligados = panes(agora)
+    aprende_janelas(sessoes, agora)
     for s in sessoes:  # a sessao dentro do herdr ganha o pane (e a pergunta da tela): da para responder por aqui
         p = ligados.get(id_cli(s["id"])) or {}
         s["pane"], s["bloqueio"] = p.get("pane_id"), p.get("bloqueio")
@@ -1314,7 +1347,8 @@ class Pedido(BaseHTTPRequestHandler):
         elif url.path == "/api/saude":
             self.responde(200, {"monitor": True, "versao": VERSAO, "pid": os.getpid(), "rede": self.server.rede})
         elif url.path == "/api/estado":
-            self.responde(200, estado())
+            # O token vai junto: a pagina aberta antes de um reinicio pega o novo (so a mesma origem le esta resposta).
+            self.responde(200, dict(estado(), token=TOKEN))
         elif url.path == "/api/vozes":
             self.responde(200, {"vozes": vozes_locais()})
         elif url.path == "/api/tela":
